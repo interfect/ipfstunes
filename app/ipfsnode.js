@@ -2,14 +2,21 @@
 
 // Global setup
 
-// Make an IPFS node
-var IPFS = require('ipfs')
+// Find the IPFS implementation
+var IPFS
+if(!(typeof require === 'undefined')) {
+    // Can load through Node
+    IPFS = require('ipfs')
+} else if(!(typeof Ipfs === 'undefined')) {
+    // Can load through browser global
+    IPFS = Ipfs
+}
 
 // If true, make a temporary/randomly-named IPFS node
 var temp = false;
-
 var randID = Math.floor((Math.random() * 100000) + 1)
 
+// Make an IPFS node
 var node = new IPFS(temp ? ("tempnode" + randID) : undefined)
 
 console.log(node)
@@ -93,44 +100,10 @@ initIfNeeded(node, () => {
                         node.goOnline(() => {
                             console.log("Online status: ", node.isOnline())
 
-                            //node.swarm.connect("/libp2p-webrtc-star/ip4/10.1.0.2/tcp/9090/ws/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSoooo1", console.log)
-
                             // Dump peers we have
                             node.swarm.peers((err, peers) => {
                                 peers.forEach((multiaddr) => {
                                     console.log(multiaddr.toString())
-                                })
-                            })
-                            
-                            
-                            // Add a file
-                            node.files.add(new Buffer("Hello world"), (err, returned) => {
-                                console.log("File add error: ", err)
-                                console.log("File add return: ", returned)
-                                
-                            })
-                            
-                            // Dump the contents
-                            node.files.get("QmNRCQWfgze6AbBCaT1rkrkV5tJ2aP4oTNPb5JZcXYywve", (err, readable) => {
-                                readable.on('data', (ipfs_file_object) => {
-                                    // We get a bunch of file objects
-                                    console.log("File object: ", ipfs_file_object)
-                                    console.log("Data size: ", ipfs_file_object.size)
-                                    
-                                    // They have content streams
-                                    ipfs_file_object.content.on('data', (actual_bytes) => {
-                                        console.log("Data bytes: ", actual_bytes.toString('ascii'))
-                                    })
-                                    
-                                    // But we have to unpause them to actually get data
-                                    ipfs_file_object.content.resume()
-                                })
-                            })
-                            
-                            // We also have the simpler cat API, when not looping over directories.
-                            node.files.cat("QmNRCQWfgze6AbBCaT1rkrkV5tJ2aP4oTNPb5JZcXYywve", (err, content_stream) => {
-                                content_stream.on('data', (actual_bytes) => {
-                                    console.log("Cat bytes: ", actual_bytes.toString('ascii'))
                                 })
                             })
                             
