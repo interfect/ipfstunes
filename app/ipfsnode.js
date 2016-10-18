@@ -46,10 +46,10 @@ var IpfsNode = (function () {
   ipfsnode.start = function (ipfs_online_callback) {
 
     // Init the node
-    initIfNeeded(ipfs, (callback) => {
+    initIfNeeded(this.ipfs, (callback) => {
       // On first initialization, do some setup
       // Get the node config we just init-ed
-      ipfs.config.get((err, config) => {
+      this.ipfs.config.get((err, config) => {
         if (err) {
           ipfs_online_callback(err)
           return
@@ -60,7 +60,7 @@ var IpfsNode = (function () {
         // addresses.
         var star_addr = ('/libp2p-webrtc-star/ip4/127.0.0.1/tcp/9090/ws/ipfs/' +
           config.Identity.PeerID)
-        ipfs.config.set('Addresses.Swarm[1]', star_addr, (err) => {
+        this.ipfs.config.set('Addresses.Swarm[1]', star_addr, (err) => {
           if (err) {
             ipfs_online_callback(err)
             return
@@ -77,10 +77,10 @@ var IpfsNode = (function () {
         return
       }
       // Have the node set itself up
-      ipfs.load(() => {
+      this.ipfs.load(() => {
         // Go online and connect to things
-        ipfs.goOnline(() => {
-          if(ipfs.isOnline()) {
+        this.ipfs.goOnline(() => {
+          if(this.ipfs.isOnline()) {
             // We went online successfully. Call the callback that the module
             // consumer gave us.
             ipfs_online_callback()
@@ -90,7 +90,7 @@ var IpfsNode = (function () {
         })
       })
     })
-  })
+  }
   
   // Return the completed module object, with start method and ipfs field
   return ipfsnode

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>IPFSTunes</title>
+    
+    <!-- Main stylesheet -->
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <!-- Font Awesome stylesheet for icons -->
+    <link rel="stylesheet" href="lib/font-awesome/css/font-awesome.min.css">
+    
+  </head>
+  <body>
+    <!-- This is the actual main UI Ractive div -->
+    <div id="player" class="player">
+    </div>
+  </body>
+
+  <!-- Load ractive  -->
+  <script src="lib/ractive.js"></script>
+  <!-- For mobile support, we do everything with tap events -->
+  <script src="lib/ractive-events-tap.js"></script>
+  <!-- But we also have keys! -->
+  <script src="lib/ractive-events-keys.js"></script>
+  <!-- We want to be able to scrollwheel left and right in the playlist -->
+  <script src="lib/ractive-events-mousewheel.js"></script>
+  
+  <!-- We need the ipfs Node module to provide the global Ipfs -->
+  <script src="lib/ipfs.js"></script>
+  
+  <!-- We need an EventEmitter implementation, because the Player module wants
+  to be given one to communicate with its backend on. -->
+  <script src="lib/EventEmitter.js"></script>
+  
+  <!-- We need the backend IPFS code that constitutes our in-browser IPFS node -->
+  <script src="ipfsnode.js"></script>
+  
+  <!-- We need the player module that manages the UI -->
+  <script src="player.js"></script>
+  
+  <script>
+    // Start upo IPFS
+    IpfsNode.start((err) => {
+        if (err) {
+            throw err
+        }
+        
+        // Make a channel to connect the frontend and the backend
+        var backend_channel = new EventEmitter()
+        // Hack it up to support the .send() syntax from Electron
+        backend_channel.send = backend_channel.emit
+        
+        // Satrt up the player and point it at the channel
+        Player.start(document.getElementById('player'), backend_channel)
+        
+        // TODO: Implement an IPFS-based backend that handles player-play,
+        // player-pause, player-url, and player-search, and emits player-songs,
+        // player-duration, player-progress, and player-ended
+    })
+  </script>
+</html>
