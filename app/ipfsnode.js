@@ -1,131 +1,97 @@
-// main.js: main entry point for the app
+// Provides an IpfsNode that can be started with .start() and exposes a working
+// IPFS instance as .ipfs. Handles all of the startup and peer management stuff.
+// Auto-finds its IPFS module dependency.
+var IpfsNode = (function () {
 
-// Global setup
-
-// Find the IPFS implementation
-var IPFS
-if(!(typeof require === 'undefined')) {
+  // Find the IPFS implementation
+  var IPFS
+  if(!(typeof require === 'undefined')) {
     // Can load through Node
     IPFS = require('ipfs')
-} else if(!(typeof Ipfs === 'undefined')) {
+  } else if(!(typeof Ipfs === 'undefined')) {
     // Can load through browser global
     IPFS = Ipfs
-}
+  }
 
-// If true, make a temporary/randomly-named IPFS node
-var temp = false;
-var randID = Math.floor((Math.random() * 100000) + 1)
+  // Make the object we will export as our singleton IPFS node manager thingy.
+  var ipfsnode = {
+    // This provides the actual IPFS interface: ipfs.files.add(), etc.
+    ipfs: new IPFS()
+  }
 
-// Make an IPFS node
-var node = new IPFS(temp ? ("tempnode" + randID) : undefined)
-
-console.log(node)
-
-if(!(typeof window === 'undefined')) {
-    // We are running in the browser and want to expose our IPFS node to browser
-    // code.
-    window.node = node
-}
-
-// Start it up as in https://github.com/ipfs/js-ipfs/blob/c8dbf6ba16017103b29589bb6d4173f954b4325f/src/http-api/index.js
-
-// Init a repo in the given IPFS node it if hasn't got one already, then call
-// the callback.
-function initIfNeeded(node, callback) {
-    node.init((err) => {
-        if(!err) {
-            console.log("Initialized new repo")
-        }
-        
-        // Ignore already exists type errors and just run the callback.
+  // Utility function. Init a repo in the given IPFS node it if hasn't got one
+  // already. Calls the setup callback, passing the normal callback, after first
+  // initialization. Calls the normal callback directly after subsequent
+  // initializations. Calls the normal callback with an error parameter if there
+  // is an error.
+  function initIfNeeded (ipfs, setup, callback) {
+    ipfs.init((err) => {
+      if (!err) {
+        // This is the first time we have started a node
+        setup(callback)
+      } else if (err.message == 'repo already exists') {
+        // The node already exists
         callback()
+      } else {
+        callback(err)
+      }
     })
-}
+  }
+  
+  /**
+   * Start up the node, and call the given callback with no argument when it is
+   * online. If an error is encountered, call the callback with the error
+   * instead.
+   */
+  ipfsnode.start = function (ipfs_online_callback) {
 
-// Init the node before loading
-initIfNeeded(node, () => {
-
-    console.log("Ready to get config")
-
-    // Get the node config we just init-ed
-    node.config.get((err, config) => {
-        console.log("Config: ", config)
-        console.log("Error: ", err)
-        
+    // Init the node
+    initIfNeeded(ipfs, (callback) => {
+      // On first initialization, do some setup
+      // Get the node config we just init-ed
+      ipfs.config.get((err, config) => {
         if (err) {
-            throw err
+          ipfs_online_callback(err)
+          return
         }
-
-        // We don't get webrtc unless we stick some webrtc addresses in the peer info.
-        // Like /libp2p-webrtc-star/ip4/127.0.0.1/tcp/9090/ws/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSoooo1
-        // Or   /libp2p-webrtc-star/ip4/10.1.0.1/tcp/9090/ws/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSoooo1
-        
-        // Points to a signaling server we talk to and then our IPFS hash
-        // Server is in <https://github.com/libp2p/js-libp2p-webrtc-star>
-        
-        // But we're going to need our node's IPFS identity to construct the address.
-        // Which is in config.Identity.PeerId
-        
-        console.log("Node ID: ", config.Identity.PeerID)
-        
-        // Make a valid address including our IPFS ID. Unless we have *one*
-        // of these, the libp2p-webrtc-star transport won't be initialized,
-        // and then we won't be able to dial out on it to *any* signaling
-        // server.
-        var webrtc_star_addr = "/libp2p-webrtc-star/ip4/10.1.0.2/tcp/9090/ws/ipfs/" + config.Identity.PeerID
-    
-        // For now we use a local signaling server
-        node.config.set("Addresses.Swarm[1]", webrtc_star_addr, (err) => {
-
-            console.log(err)
-            
-            if (err) {
-                throw err
-            }
-
-
-            // Load up the node again now that the addrs are ready.
-            // It should get the addrs we need.
-            node.load(() => {
-            
-                console.log("Loaded")
-                
-                // Delete this bootstrap peer if already present
-                node.bootstrap.rm("/libp2p-webrtc-star/ip4/10.1.0.2/tcp/9090/ws/ipfs/QmNQL65n2gcRBmLSfRzEQ5VvBu7cueaic5SLX65AH4GFCP", () => {
-                
-                    // Add a bootstrap peer so we connect to the signaling server and actually look for peers there.
-                    node.bootstrap.add("/libp2p-webrtc-star/ip4/10.1.0.2/tcp/9090/ws/ipfs/QmNQL65n2gcRBmLSfRzEQ5VvBu7cueaic5SLX65AH4GFCP", () => {
-
-                        // Go online and connect to things
-                        node.goOnline(() => {
-                            console.log("Online status: ", node.isOnline())
-
-                            // Dump peers we have
-                            node.swarm.peers((err, peers) => {
-                                peers.forEach((multiaddr) => {
-                                    console.log(multiaddr.toString())
-                                })
-                            })
-                            
-                            // Periodically dump peers
-                            setInterval(() => {
-                                console.log("Peer list:")
-                                node.swarm.peers((err, peers) => {
-                                    peers.forEach((multiaddr) => {
-                                        console.log(multiaddr.toString())
-                                    })
-                                })
-                            }, 60 * 1000); 
-                            
-                            
-
-                        })
-                    })
-                })
-                
-            })
-            
+        // Add at least one libp2p-webrtc-star address. Without an address like
+        // this the libp2p-webrtc-star transport won't be installed, and the
+        // resulting node won't be able to dial out to libp2p-webrtc-star
+        // addresses.
+        var star_addr = ('/libp2p-webrtc-star/ip4/127.0.0.1/tcp/9090/ws/ipfs/' +
+          config.Identity.PeerID)
+        ipfs.config.set('Addresses.Swarm[1]', star_addr, (err) => {
+          if (err) {
+            ipfs_online_callback(err)
+            return
+          }
+          // Continue down the already-initialized code path
+          callback()
         })
+      })
+    }, (err) => {
+      // If the repo was already initialized, or after the first-time
+      // initialization code is run, we'll do this.
+      if (err) {
+        ipfs_online_callback(err)
+        return
+      }
+      // Have the node set itself up
+      ipfs.load(() => {
+        // Go online and connect to things
+        ipfs.goOnline(() => {
+          if(ipfs.isOnline()) {
+            // We went online successfully. Call the callback that the module
+            // consumer gave us.
+            ipfs_online_callback()
+          } else {
+            ipfs_online_callback(Error("IPFS did not come online"))
+          }
+        })
+      })
     })
-
-})
+  })
+  
+  // Return the completed module object, with start method and ipfs field
+  return ipfsnode
+}())
