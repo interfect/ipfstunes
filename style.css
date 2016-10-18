@@ -1,0 +1,182 @@
+html {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+html, body, .playlist-holder {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* What's in the browseable view above the playlist */
+.currentView {
+    position: absolute;
+    bottom: 177px;
+    top: 0;
+    left: 0;
+    right: 0;
+    overflow: auto;
+}
+
+/* The controls for playback */
+.controls-holder {
+    position: absolute;
+    bottom: 137px;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background-color: #323232;
+    border-top: 1px solid #3d3d3d;
+    
+    color: #ffffff;
+}
+
+.controls {
+    height: 100%;
+    width: 120px;
+    
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+}
+
+.play-control {
+    width: 30px;
+    height: 30px;
+    /* Override Font Awesome line height */
+    line-height: 30px !important;
+    text-align: center;
+    
+    text-decoration: none;  
+    color: #ffffff;
+}
+
+.playlist-holder {
+    position: absolute;
+    bottom: 0px;
+    left: 0px;
+    right: 0px;
+    height: 137px;
+    background-color: #000000;
+}
+
+.playlist {
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+}
+
+.playlist-item-holder {
+    flex-shrink: 0;
+    
+    width: 86px;
+    height: 100%;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.playlist-item {
+    width: 75px;
+    height: 110px;
+    border-top: 1px solid #363636;
+    padding: 2.5px;
+    border-radius: 2px;
+    background-color: #2d2d2d;
+    color: white;
+    flex: 0 0 auto;
+    
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+    
+    font-size: 9px;
+    text-shadow: 0px 1px 0px rgba(255,255,255,.5);
+}
+
+.playlist-item-title {
+    height: 1em;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 70px;
+    text-align: center;
+}
+
+.playlist-item-artist {
+    height: 1em;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 70px;
+    text-align: center;
+    
+    font-size: 8px;
+}
+
+.playlist-item.playing {
+    background: linear-gradient(to bottom, #f89200 0%, #f66c00 100%);
+    border-top: 1px solid #faad00;
+    text-shadow: 0px 1px 0px #525252;
+}
+
+.playlist-thumb {
+    width: 72px;
+    height: 72px;
+    border: 1px solid #000000;
+    
+    position: relative;
+    
+    	background-image: url("gs-logo-light.png");
+    	background-size: cover;
+    background-repeat: no-repeat;
+    background-position: 50% 50%;
+    	background-color: black;
+}
+
+.playlist-item.playing .playlist-thumb {
+    border: 1px solid #c66000;
+}
+
+.playlist-control {
+    position: absolute;
+    z-index: 10;
+    display: block;
+    
+    width: 16px;
+    height: 16px;
+    background-color: #525252;
+    
+    /* Center the text */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text-decoration: none;  
+    
+    color: #ffffff;
+}
+
+.playlist-remove {
+    top: 0px;
+    right: 0px;
+    left: auto;
+}
+
+.playlist-save {
+    bottom: 0px;
+    left: 0px;
+    top: auto;
+}
+
+.playlist-love {
+    bottom: 0px;
+    right: 0px;
+    top: auto;
+    left: auto;
+}
+

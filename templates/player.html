@@ -1,0 +1,61 @@
+<!-- Ractive player template HTML fragment -->
+<div class="page">
+    <div class="currentView">
+        <h1>{{brandName}}</h1>
+        
+        <!-- Here's the part that does the playing -->
+        {{#if nowPlaying}}
+            {{#with nowPlaying.song}}
+                <p>Now playing: {{title}} by {{artist}} on {{album}}</p>
+            {{/with}}
+                <p>Play time: {{playback.progress}} ms of {{playback.duration}} ms total.</p>
+        {{/if}}
+        
+        <!-- Here is the search UI -->
+        <form>
+            <input placeholder="Search" value="{{searchQuery}}" on-enter="search"/>
+            <input type="submit" value="Search" onclick="return false" on-tap="search"/>
+        </form>
+        
+
+        <!-- Here is the list of songs to choose from -->
+        <p>Available songs:</p>
+        <ul>
+            {{#each availableSongs:num}}
+                <li on-tap="queue:{{num}}">{{artist}} - {{title}} - {{album}}</li>
+            {{/each}}
+        </ul>
+    </div>
+
+    <!-- Here are the playback controls -->
+    <div class="controls-holder">
+        <div class="controls">
+            <a class="play-control" href="#" on-tap="skipBack"><span class="play-control fa fa-step-backward"></span></a>
+            {{#if playback.state == "playing"}}
+                <a class="play-control" href="#" on-tap="pause"><span class="fa fa-pause"></span></a>
+            {{else}}
+                <a class="play-control" href="#" on-tap="play"><span class="fa fa-play"></span></a>
+            {{/if}}
+            <a class="play-control" href="#" on-tap="skipAhead"><span class="fa fa-step-forward"></span></a>
+        </div>
+    </div>
+
+    <!-- Here's the playlist part -->
+    <div class="playlist-holder">
+        <div class="playlist" on-mousewheel="scrollPlaylist">
+            {{#each playlist:num}}
+                <div class="playlist-item-holder">
+                    <div class="playlist-item {{(num === playingIndex && playback.state == 'playing')  ? 'playing' : ''}}" on-tap="play:{{num}}">
+                        <div class="playlist-thumb">
+                            <a class="playlist-control playlist-remove" href="#" on-tap="remove:{{num}}"><span class="fa fa-close"></span></a>
+                            <a class="playlist-control playlist-save" href="#" on-tap="save:{{num}}"><span class="fa fa-check"></span></a>
+                            <a class="playlist-control playlist-love" href="#" on-tap="love:{{num}}"><span class="fa fa-heart"></span></a>
+                        </div>
+                        <div class="playlist-item-title">{{song.title}}</div>
+                        <div class="playlist-item-artist">{{song.artist}}</div>
+                    </div>
+                </div>
+            {{/each}}
+        </div>
+    </div>
+</div>
