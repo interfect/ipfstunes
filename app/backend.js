@@ -12,7 +12,59 @@ var Backend = (function (AV) {
     ipc: null,
     // This holds the one AV player that is allowed to make noise. Not to be
     // confused with the Player, which is the frontend,
-    global_player: null
+    global_player: null,
+    // This holds a song database
+    all_songs: []
+  }
+
+  /**
+   * Add a song to the local metadata database with the metadata decoded from
+   * the given file. Adds the file to IPFS to get its hash. Calls the callback
+   * with null and the song object, if it turns out to be a readable song. Calls
+   * the callback with an error if there is an error.
+   */
+  backend.add_song = function (file_data, callback) {
+  
+    // Load metadata and make sure it's audio
+    var asset = AV.Asset.fromBuffer(file_data)
+    
+    asset.on('error', (err) => {
+      // Report decoding errors
+      callback(err)
+    })
+    
+    asset.get('metadata', (metadata) => {
+      // We got metadata, so it must be real audio
+      console.log('Metadata', metadata)
+      
+      // Add it to IPFS
+      var ipfs = backend.ipfsnode.ipfs
+      ipfs.files.add(ipfs.Buffer.from(file_data), (err, returned) => {
+        if (err) {
+          // IPFS didn't like it, so complain
+          callback(err)
+        }
+        
+        console.log('IPFS hash:', returned[0].hash)
+        
+        // Craft a song object
+        var song = {
+          title: metadata.title,
+          album: metadata.album,
+          artist: metadata.album,
+          url: 'ipfs:' + returned[0].hash
+        }
+
+        // Add it to the database
+        backend.all_songs.push(song)
+        
+        // Call the callback with no error and the song
+        callback(null, song)
+        
+      })
+      
+    })
+  
   }
 
   /**
@@ -29,39 +81,54 @@ var Backend = (function (AV) {
       
       console.log('Backend got:', event, file_data)
       
-      // Load metadata and make sure it's audio
-      var asset = AV.Asset.fromBuffer(file_data)
-      asset.get('metadata', (metadata) => {
-        // We got metadata, so it must be real audio
-        console.log('Metadata', metadata)
+      backend.add_song(file_data, (err, song) => {
+        if (err) {
+          // Report errors
+          throw err
+        }
         
-        // Add it to IPFS
-        var ipfs = backend.ipfsnode.ipfs
-        ipfs.files.add(ipfs.Buffer.from(file_data), (err, returned) => {
-          if (err) {
-            // IPFS didn't like it, so complain
-            throw err
-          }
-          
-          console.log('IPFS hash:', returned[0].hash)
-          
-          // Craft a list of just this song to feed to the player
-          var songs = [
-            {
-              title: metadata.title,
-              album: metadata.album,
-              artist: metadata.album,
-              url: 'ipfs:' + returned[0].hash
-            }
-          ]
-          
-          // Send them to the player so it displays them.
-          event.sender.send('player-songs', songs)
-          
-        })
+        // Send updated datatabse to the player so it displays it.
+        event.sender.send('player-songs', backend.all_songs)
         
       })
         
+    })
+    
+    backend.ipc.on('player-search', (event, query) => {
+      // Handle a search query
+      
+      // First, see if it's an IPFS hash
+      var hash_regex = /(\/?ipfs\/|\/?ipns\/)?(Qm[A-HJ-NP-Za-km-z1-9]{44,45})/
+      
+      var found = query.match(hash_regex)
+      
+      if(found) {
+        // This is an IPFS hash. Extract just the hash part
+        // 0 is whole regex, 1 is IPFS/IPNS, 2 is actual hash
+        var hash = found[2]
+        
+        console.log('Searching IPFS for', hash, found)
+        
+        // Use our wrapper to get the whoile file
+        backend.ipfsnode.cat_all(hash, (err, file_data) => {
+          if (err) {
+            throw err
+          }
+            
+          backend.add_song(file_data, (err, song) => {
+            if (err) {
+              throw err
+            }
+            
+            // Send updated datatabse to the player so it displays it.
+            event.sender.send('player-songs', backend.all_songs)
+            
+          })
+        })
+          
+        
+      }
+    
     })
     
     backend.ipc.on('player-url', (event, url, playNow) => {
@@ -78,93 +145,70 @@ var Backend = (function (AV) {
       
       // Get the track data from IPFS
       var ipfs = backend.ipfsnode.ipfs
-      ipfs.files.cat(url.split(':')[1], (err, content_stream) => {
-      
-          if (err) throw err
-          
-          console.log('Playing: %s', url)
-          
-          // We're going to batch up all the buffers and make one big buffer.
-          // Streaming is for wimps.
-          var buffers_obtained = []
-          
-          content_stream.on('data', (buffer) => {
-            // Handle incoming data from IPFS
-          
-            // Stick all the buffers we get from IPFS into the list
-            if(buffer.length > 0) {
-              // Don't pass through 0 length buffers. The first buffer needs to
-              // be long enough to detect the filetype.
-              console.log('Got data from IPFS: %d bytes', buffer.length)
-              buffers_obtained.push(buffer)
+        
+      backend.ipfsnode.cat_all(url.split(':')[1], (err, file_data) => {
+        if (err) {
+          throw err
+        }
+        
+        console.log('Playing: %s', url)
+        
+        // Make an asset from the buffer
+        var asset = AV.Asset.fromBuffer(file_data)
+            
+        asset.on('format', (format) => {
+          console.log('Format decoded: ' + format)
+        })
+        
+        asset.on('duration', (duration) => {
+          console.log('Duration decoded: %d', duration)
+          // Inform the UI of the song duration
+          event.sender.send('player-duration', duration)
+        })
+        
+        asset.on('decodeStart', () => {
+          console.log('Audio decode started')
+        })
+        
+        // Make a new Player for the asset.
+        var player = new AV.Player(asset)
+        
+        // Become the One True Player
+        backend.global_player = player;
+        
+        player.on('error', (err) => {
+          console.log('Player Error: ' + err)
+          throw err
+        })
+        
+        player.on('progress', (msecs) => {
+          // Inform the UI of the playback progress
+          event.sender.send('player-progress', msecs)
+        })
+        
+        player.on('end', () => {
+          // We're done!
+          console.log('player is done')
+          event.sender.send('player-ended')
+        })
+        
+        if(playNow) {
+          console.log('Will play now')
+          asset.on('duration', () => {
+            if(backend.global_player === player) {
+              // Play only if instructed, and only after duration has been
+              // decoded (and we have the audio data ready to hand), *and*
+              // only if we are still the one true player.
+              console.log('Making play call')
+              player.play()
             }
           })
-          
-          content_stream.on('end', () => {
-            if(backend.global_player === null) {
-              console.log('All data available.')
-              
-              // Make the player only when we have all the data
-              
-              var whole_buffer = ipfs.Buffer.concat(buffers_obtained)
-              
-              // Make an asset from the buffer
-              var asset = AV.Asset.fromBuffer(whole_buffer)
-                  
-              asset.on('format', (format) => {
-                console.log('Format decoded: ' + format)
-              })
-              
-              asset.on('duration', (duration) => {
-                console.log('Duration decoded: %d', duration)
-                // Inform the UI of the song duration
-                event.sender.send('player-duration', duration)
-              })
-              
-              asset.on('decodeStart', () => {
-                console.log('Audio decode started')
-              })
-              
-              // Make a new Player for the asset.
-              var player = new AV.Player(asset)
-              
-              // Become the One True Player
-              backend.global_player = player;
-              
-              player.on('error', (err) => {
-                console.log('Player Error: ' + err)
-                throw err
-              })
-              
-              player.on('progress', (msecs) => {
-                // Inform the UI of the playback progress
-                event.sender.send('player-progress', msecs)
-              })
-              
-              player.on('end', () => {
-                // We're done!
-                console.log('player is done')
-                event.sender.send('player-ended')
-              })
-              
-              if(playNow) {
-                console.log('Will play now')
-                asset.on('duration', () => {
-                  if(backend.global_player === player) {
-                    // Play only if instructed, and only after duration has been
-                    // decoded (and we have the audio data ready to hand), *and*
-                    // only if we are still the one true player.
-                    console.log('Making play call')
-                    player.play()
-                  }
-                })
-              }
-              
-              // Preload the asset, which may eventually start the player if we
-              // are supposed to playNow.
-              player.preload()
-            }
-          })
+        }
+        
+        // Preload the asset, which may eventually start the player if we
+        // are supposed to playNow.
+        player.preload()
+      })
     })
     
     // Handle requests to pause the music
@@ -182,8 +226,6 @@ var Backend = (function (AV) {
         backend.global_player.play()
       }
     })
-    
-})
     
     console.log('Backend ready')
   }

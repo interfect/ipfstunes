@@ -247,16 +247,22 @@ var Player = (function () {
           
           if (index !== undefined && index < this.get("playlist").length) {
             console.log("Starting song " + index + "...")
-            this.set("playingIndex", index)
+            this.set({
+              "playback.state": "playing",
+              "playingIndex": index
+            })
           }
           
           if (this.get("playingIndex") >= this.get("playlist").length) {
             // Can't play an out-of-bounds song
             console.log("Starting first song...")
-            this.set("playingIndex", 0)
+            this.set({
+              "playback.state": "playing",
+              "playingIndex": 0
+            })
           }
           
-          this.set("playback.state", "playing")
+          
         })
         
         player.ractive.on("pause", function (event) {
@@ -339,8 +345,7 @@ var Player = (function () {
         
         player.ractive.on("upload", function (event) {
           // Handle file upload
-          console.log(event)
-          
+
           // Let's upload these files
           var to_upload = document.getElementById("upload").files
           for(var i = 0; i < to_upload.length; i++) {
@@ -456,7 +461,6 @@ var Player = (function () {
         // And for when we get a page of songs to show
         player.ipc.on("player-songs", function (event, songs) {
           // Just override all the songs we have already
-          console.log(songs)
           player.ractive.set("availableSongs", songs)
         })
         
