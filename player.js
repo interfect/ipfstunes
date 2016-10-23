@@ -76,6 +76,23 @@ var Player = (function () {
   }
   
   /**
+   * Given a File object from the HTML5 Files API, load all the content and send
+   * it to the backend to be uploaded.
+   */
+  player.uploadFile = function(file) {
+    // Make a reader to read the file
+    var reader = new FileReader()
+    reader.addEventListener("load", function(event) {
+      // When the file is loaded, send it along
+      console.log("Loaded file")
+      player.ipc.send("upload", reader.result)
+    })
+    
+    // Load an ArrayBuffer of file contents and send it to the backend
+    reader.readAsArrayBuffer(file)
+  }
+  
+  /**
    * Return a unique ID (to distinguish instances of the same song in the
    * playlist, when the playlist entries are shifted around.
    */
@@ -318,6 +335,18 @@ var Player = (function () {
         player.ractive.on("scrollPlaylist", function (event) {
           // Handle scrollwheel in playlist to make it scroll horizontally
           document.querySelector(".playlist").scrollLeft += event.original.deltaY          
+        })
+        
+        player.ractive.on("upload", function (event) {
+          // Handle file upload
+          console.log(event)
+          
+          // Let's upload these files
+          var to_upload = document.getElementById("upload").files
+          for(var i = 0; i < to_upload.length; i++) {
+            // Upload each File object
+            player.uploadFile(to_upload[i])
+          }
         })
         
         // Watch the nowPlaying state and make actual sound
