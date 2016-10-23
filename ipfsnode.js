@@ -92,6 +92,49 @@ var IpfsNode = (function () {
     })
   }
   
+  /**
+   * Download all of a file and call the callback with null and a single
+   * complete buffer. If an error occurs, call the callback with the error.
+   */
+  ipfsnode.cat_all = function (hash, callback) {
+  
+    // Go get the file
+    ipfsnode.ipfs.files.cat(hash, (err, content_stream) => {
+      if (err) {
+        // Forward errors
+        callback(err)
+      }
+      
+      // We're going to batch up all the buffers and make one big buffer.
+      var buffers_obtained = []
+      
+      content_stream.on('data', (buffer) => {
+        // Handle incoming data from IPFS
+      
+        // Stick all the buffers we get from IPFS into the list
+        if(buffer.length > 0) {
+          // Don't pass through 0 length buffers.
+          console.log('Got data from IPFS: %d bytes', buffer.length)
+          buffers_obtained.push(buffer)
+        }
+      })
+      
+      content_stream.on('error', (err) => {
+        // There might be errors on the stream maybe?
+        // TODO: does this throw errors?
+        callback(err)
+      })
+      
+      content_stream.on('end', () => {
+        // We got the whole thing. Send it along.
+        callback(null, ipfsnode.ipfs.Buffer.concat(buffers_obtained))
+      })
+    })
+    
+    // TODO: timeouts or something for when we can't fetch a file quickly.
+    
+  }
+  
   // Return the completed module object, with start method and ipfs field
   return ipfsnode
 }())
