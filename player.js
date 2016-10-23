@@ -85,7 +85,7 @@ var Player = (function () {
     reader.addEventListener("load", function(event) {
       // When the file is loaded, send it along
       console.log("Loaded file")
-      player.ipc.send("upload", reader.result)
+      player.ipc.send("player-upload", reader.result)
     })
     
     // Load an ArrayBuffer of file contents and send it to the backend
@@ -347,6 +347,12 @@ var Player = (function () {
             // Upload each File object
             player.uploadFile(to_upload[i])
           }
+          
+          // Clear out the upload control
+          document.getElementById("upload").value = null
+          
+          // TODO: tell the user it worked.
+          
         })
         
         // Watch the nowPlaying state and make actual sound
@@ -400,7 +406,7 @@ var Player = (function () {
           
           if (newUrl !== undefined && newUrl != "") {
             // Start playing the new song
-            console.log("Make new player")
+            console.log("Changing song")
 
             // We dont want to start immediately unless we think we're playing.
             var playNow = (player.ractive.get("playback.state") == "playing")

@@ -33,11 +33,18 @@
   to be given one to communicate with its backend on. -->
   <script src="lib/EventEmitter.js"></script>
   
-  <!-- We need the backend IPFS code that constitutes our in-browser IPFS node -->
+  <!-- We need the IPFS code that manages our in-browser IPFS node -->
   <script src="ipfsnode.js"></script>
   
   <!-- We need the player module that manages the UI -->
   <script src="player.js"></script>
+  
+  <!-- The backend needs aurora.js and mp3.js -->
+  <script src="lib/aurora.js"></script>
+  <script src="lib/mp3.js"></script>
+  
+  <!-- We need the backend module that glues the UI and the IPFS node together -->
+  <script src="backend.js"></script>
   
   <script>
     // Start upo IPFS
@@ -48,15 +55,35 @@
         
         // Make a channel to connect the frontend and the backend
         var backend_channel = new EventEmitter()
-        // Hack it up to support the .send() syntax from Electron
-        backend_channel.send = backend_channel.emit
+        // Hack it up to support the .send() syntax from Electron. The .send()
+        // method sends an event that gets an event object as a first argument,
+        // with a sender field.
+        backend_channel.send = function() {
+            // Make a real array
+            var args = Array.from(arguments)
+            // Shift off the event name
+            var event_name = args.shift()
+            
+            // Make a fake event object
+            var event_object = {
+                name: event_name,
+                // It has to have a sender field that can send messages back
+                sender: backend_channel
+            }
+            
+            // Insert as an argument after the name of the event
+            args.unshift(event_object)
+            args.unshift(event_name)
+            
+            return backend_channel.emit.apply(this, args)
+        }
         
         // Satrt up the player and point it at the channel
         Player.start(document.getElementById('player'), backend_channel)
         
-        // TODO: Implement an IPFS-based backend that handles player-play,
-        // player-pause, player-url, and player-search, and emits player-songs,
-        // player-duration, player-progress, and player-ended
+        // Give the IpfsNode to the backend, and tell it to talk to the player
+        // on this channel.
+        Backend.start(IpfsNode, backend_channel)
     })
   </script>
 </html>
