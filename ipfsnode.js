@@ -58,7 +58,7 @@ var IpfsNode = (function () {
         // this the libp2p-webrtc-star transport won't be installed, and the
         // resulting node won't be able to dial out to libp2p-webrtc-star
         // addresses.
-        var star_addr = ('/libp2p-webrtc-star/ip4/127.0.0.1/tcp/9090/ws/ipfs/' +
+        var star_addr = ('/libp2p-webrtc-star/ip4/10.1.0.10/tcp/9090/ws/ipfs/' +
           config.Identity.PeerID)
         this.ipfs.config.set('Addresses.Swarm[1]', star_addr, (err) => {
           if (err) {
