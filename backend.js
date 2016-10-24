@@ -68,14 +68,54 @@ var Backend = (function (AV) {
   
   /**
    * Download song records as JSON from the given URL and keep them in the local
-   * database.
+   * database. URL may be ipfs:.
    */
   backend.loadSongs = function (url) {
-    backend.getJSON(url).then(function (songs) {
-      // Add all the songs we downloaded.
-      console.log('Downloaded songs', songs)
-      backend.allSongs = backend.allSongs.concat(songs)
-    }).catch(err => console.log(err))
+    var parts = url.split(':')
+    if (parts[0] == 'ipfs') {
+      // This is an ipfs URL.
+      backend.ipfsnode.catAll(parts[1], (err, fileData) => {
+        if (err) {
+          throw err
+        }
+        
+        // We got something back. Parse it as JSON
+        var parsed = JSON.parse(fileData.toString('utf-8'))
+        
+        // Add it to the songs
+        backend.allSongs = backend.allSongs.concat(parsed)
+      })
+    } else {
+      backend.getJSON(url).then(function (songs) {
+        // Add all the songs we downloaded.
+        console.log('Downloaded songs', songs)
+        backend.allSongs = backend.allSongs.concat(songs)
+      }).catch(err => console.log(err))
+    }
+  }
+  
+  
+  /**
+   * Save the song database to IPFS as JSON. Call the callback with an error if
+   * it fails, or null and the IPFS hash of the saved database if it succeeds.
+   */
+  backend.saveSongs = function(callback) {
+    console.log('Saving database of %d songs', backend.allSongs.length)
+  
+    // Add it to IPFS
+    var ipfs = backend.ipfsnode.ipfs
+    ipfs.files.add(ipfs.Buffer.from(JSON.stringify(backend.allSongs)), (err, returned) => {
+      if (err) {
+        // IPFS didn't like it, so complain
+        callback(err)
+      }
+      
+      console.log('Database saved to IPFS hash:', returned[0].hash)
+      
+      // Call the callback with no error and the hash
+      callback(null, returned[0].hash)
+      
+    })
   }
   
   /**
@@ -240,8 +280,13 @@ var Backend = (function (AV) {
             
           backend.addSong(fileData, (err, song) => {
             if (err) {
-              throw err
+              // Maybe it's not a song but some metadata
+              console.log('Non-song %s:', hash, err)
+              backend.loadSongs('ipfs:' + hash)
+              return
             }
+            
+            // Otherwise it's a single song and we successfully loaded it
             
             // Send entire updated datatabse to the player so it displays it.
             event.sender.send('player-songs', backend.allSongs)
@@ -369,6 +414,30 @@ var Backend = (function (AV) {
         console.log('No global player; play when ready')
         backend.playNow = true
       }
+    })
+    
+    // Now import/export stuff
+    
+    // Import song metadata from the given URL
+    backend.ipc.on('player-import', (event, url) => {
+      // Use the song loader method
+      backend.loadSongs(url)
+    })
+    
+    // Export all song metadata to a URL and send it back in the player-exported
+    // event.
+    backend.ipc.on('player-export', (event, url) => {
+      backend.saveSongs((err, hash) => {
+        if (err) {
+          // Complain about any errors
+          throw err
+        }
+        
+        console.log('Exported successfully')
+        
+        // Reply with the hash of the database
+        event.sender.send('player-exported', 'ipfs:' + hash)
+      })
     })
     
     console.log('Backend ready')

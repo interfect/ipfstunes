@@ -28,7 +28,9 @@ var Player = (function () {
       // This is the next noince value for songs added to the playlist
       nextNonce: 0,
       // This is the search query we're sending
-      searchQuery: ""
+      searchQuery: "",
+      // This is the database hash we are exporting/importing
+      databaseHash: ""
     },
     
     // This is the event channel through which we communicate with the code
@@ -398,6 +400,8 @@ var Player = (function () {
         })
         
         // And now the stuff we need for search
+        
+        // Handle a search request from the user
         player.ractive.on("search", function (event) {
           // When someone hits search, send a search event
           player.ipc.send("player-search", player.ractive.get("searchQuery"))
@@ -407,6 +411,36 @@ var Player = (function () {
         player.ipc.on("player-songs", function (event, songs) {
           // Just override all the songs we have already
           player.ractive.set("availableSongs", songs)
+        })
+        
+        // And now the stuff we need for database import/export
+        
+        // Handle importing some song metadata
+        player.ractive.on("import-db", function (event) {
+            
+            // Grab the hash to import
+            var hash = player.ractive.get("databaseHash")
+            
+            if (!hash.includes(":")) {
+                // Add an IPFS protocol specifier
+                hash = hash + "ipfs:"
+            }
+            
+            // Tell the backend to import this URL
+            player.ipc.send("player-import", hash)
+        })
+        
+        // Handle exporting all song metadata
+        player.ractive.on("export-db", function (event) {
+            // Tell the backend to export and esnd us an event back
+            player.ipc.send("player-export")
+        })
+        
+        // Handle an exported-to-URL event
+        player.ipc.on("player-exported", function (event, url) {
+          // Just display the URL
+          console.log('Set to URL: ', url)
+          player.ractive.set("databaseHash", url)
         })
         
       })
