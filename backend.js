@@ -160,7 +160,7 @@ var Backend = (function (AV) {
     var index = 0
     
     // This is our page size
-    var pageSize = 10
+    var pageSize = 50
     
     return function (page, pageHandler) {
       console.log('Finding page %d', page)
