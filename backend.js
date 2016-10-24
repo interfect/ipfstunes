@@ -337,6 +337,24 @@ var Backend = (function (AV) {
     
     })
     
+    // We can get hints that URLS will be played soon and that we should go
+    // looking for their content.
+    backend.ipc.on('player-hint', (event, url) => {
+      
+      var ipfs = backend.ipfsnode.ipfs
+      ipfs.files.cat(url.split(':')[1], (err, stream) => {
+        if (err) {
+          throw err
+        }
+        
+        console.log('IPFS retrieved hint: %s', url)
+        
+        // Ignore the stream
+      })
+    
+    })
+    
+    // Actually play URLs
     backend.ipc.on('player-url', (event, url, playNow) => {
       // Play the given URL. Ought to be an ipfs:<hash> URL.
       
@@ -356,8 +374,6 @@ var Backend = (function (AV) {
       backend.playNow = playNow
       
       // Get the track data from IPFS
-      var ipfs = backend.ipfsnode.ipfs
-        
       backend.ipfsnode.catAll(url.split(':')[1], (err, fileData) => {
         if (err) {
           throw err
