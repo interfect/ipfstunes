@@ -147,7 +147,7 @@ var Player = (function () {
     index -= 1
     player.ractive.set("playingIndex", index)
     
-    // Startr playback of this track (which should exist)
+    // Start playback of this track (which should exist)
     player.ractive.set("playback.state", "playing")
   }
   
@@ -194,15 +194,17 @@ var Player = (function () {
               "playback.state": "playing",
               "playingIndex": index
             })
-          }
-          
-          if (this.get("playingIndex") >= this.get("playlist").length) {
+          } else if (this.get("playingIndex") >= this.get("playlist").length) {
             // Can't play an out-of-bounds song
             console.log("Starting first song...")
             this.set({
               "playback.state": "playing",
               "playingIndex": 0
             })
+          } else {
+            // We haven't been given an index, but we have one and it's in
+            // range.
+            this.set("playback.state", "playing")
           }
           
           
@@ -290,10 +292,10 @@ var Player = (function () {
           // Handle file upload
 
           // Let's upload these files
-          var to_upload = document.getElementById("upload").files
-          for(var i = 0; i < to_upload.length; i++) {
+          var toUpload = document.getElementById("upload").files
+          for(var i = 0; i < toUpload.length; i++) {
             // Upload each File object
-            player.uploadFile(to_upload[i])
+            player.uploadFile(toUpload[i])
           }
           
           // Clear out the upload control

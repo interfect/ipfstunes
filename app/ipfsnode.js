@@ -43,7 +43,7 @@ var IpfsNode = (function () {
    * online. If an error is encountered, call the callback with the error
    * instead.
    */
-  ipfsnode.start = function (ipfs_online_callback) {
+  ipfsnode.start = function (ipfsOnlineCallback) {
 
     // Init the node
     initIfNeeded(this.ipfs, (callback) => {
@@ -51,18 +51,18 @@ var IpfsNode = (function () {
       // Get the node config we just init-ed
       this.ipfs.config.get((err, config) => {
         if (err) {
-          ipfs_online_callback(err)
+          ipfsOnlineCallback(err)
           return
         }
         // Add at least one libp2p-webrtc-star address. Without an address like
         // this the libp2p-webrtc-star transport won't be installed, and the
         // resulting node won't be able to dial out to libp2p-webrtc-star
         // addresses.
-        var star_addr = ('/libp2p-webrtc-star/ip4/10.1.0.10/tcp/9090/ws/ipfs/' +
+        var starAddr = ('/libp2p-webrtc-star/ip4/10.1.0.10/tcp/9090/ws/ipfs/' +
           config.Identity.PeerID)
-        this.ipfs.config.set('Addresses.Swarm[1]', star_addr, (err) => {
+        this.ipfs.config.set('Addresses.Swarm[1]', starAddr, (err) => {
           if (err) {
-            ipfs_online_callback(err)
+            ipfsOnlineCallback(err)
             return
           }
           // Continue down the already-initialized code path
@@ -73,7 +73,7 @@ var IpfsNode = (function () {
       // If the repo was already initialized, or after the first-time
       // initialization code is run, we'll do this.
       if (err) {
-        ipfs_online_callback(err)
+        ipfsOnlineCallback(err)
         return
       }
       // Have the node set itself up
@@ -83,9 +83,9 @@ var IpfsNode = (function () {
           if(this.ipfs.isOnline()) {
             // We went online successfully. Call the callback that the module
             // consumer gave us.
-            ipfs_online_callback()
+            ipfsOnlineCallback()
           } else {
-            ipfs_online_callback(Error("IPFS did not come online"))
+            ipfsOnlineCallback(Error("IPFS did not come online"))
           }
         })
       })
@@ -96,38 +96,38 @@ var IpfsNode = (function () {
    * Download all of a file and call the callback with null and a single
    * complete buffer. If an error occurs, call the callback with the error.
    */
-  ipfsnode.cat_all = function (hash, callback) {
+  ipfsnode.catAll = function (hash, callback) {
   
     // Go get the file
-    ipfsnode.ipfs.files.cat(hash, (err, content_stream) => {
+    ipfsnode.ipfs.files.cat(hash, (err, contentStream) => {
       if (err) {
         // Forward errors
         callback(err)
       }
       
       // We're going to batch up all the buffers and make one big buffer.
-      var buffers_obtained = []
+      var buffersObtained = []
       
-      content_stream.on('data', (buffer) => {
+      contentStream.on('data', (buffer) => {
         // Handle incoming data from IPFS
       
         // Stick all the buffers we get from IPFS into the list
         if(buffer.length > 0) {
           // Don't pass through 0 length buffers.
           console.log('Got data from IPFS: %d bytes', buffer.length)
-          buffers_obtained.push(buffer)
+          buffersObtained.push(buffer)
         }
       })
       
-      content_stream.on('error', (err) => {
+      contentStream.on('error', (err) => {
         // There might be errors on the stream maybe?
         // TODO: does this throw errors?
         callback(err)
       })
       
-      content_stream.on('end', () => {
+      contentStream.on('end', () => {
         // We got the whole thing. Send it along.
-        callback(null, ipfsnode.ipfs.Buffer.concat(buffers_obtained))
+        callback(null, ipfsnode.ipfs.Buffer.concat(buffersObtained))
       })
     })
     
