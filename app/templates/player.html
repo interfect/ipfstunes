@@ -31,6 +31,15 @@
             <p>Add songs:</p>
             <input type="file" id="upload" on-change="upload" multiple/>
         </div>
+        
+        <!-- And here is the database export/import UI -->
+        <div class="database">
+            <p>Database:</p>
+            <input placeholder="Hash" value="{{databaseHash}}"/>
+            <input type="button" value="Import" onclick="return false" on-tap="import-db"/>
+            <input type="button" value="Export" onclick="return false" on-tap="export-db"/>
+        </div>
+        
     </div>
     
     
