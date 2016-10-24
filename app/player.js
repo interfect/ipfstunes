@@ -233,7 +233,8 @@ var Player = (function () {
           // Put the song on the playlist in a playlist entry
           this.push("playlist", {song: song, nonce: player.nonce()})
           
-          // Hint the song to the backend so it knows it may be played soon
+          // Hint the song to the backend so it knows it may be played soon.
+          // TODO: stop hinting and preloading in aurora.js at the same time.
           player.ipc.send('player-hint', song.url)
         })
         
