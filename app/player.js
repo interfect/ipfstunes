@@ -232,6 +232,9 @@ var Player = (function () {
           var song = this.get("availableSongs[" + index + "]")
           // Put the song on the playlist in a playlist entry
           this.push("playlist", {song: song, nonce: player.nonce()})
+          
+          // Hint the song to the backend so it knows it may be played soon
+          player.ipc.send('player-hint', song.url)
         })
         
         player.ractive.on("remove", function (event, index) {
