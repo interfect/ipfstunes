@@ -54,39 +54,46 @@
         }
         
         // Make a channel to connect the frontend and the backend
-        var backend_channel = new EventEmitter()
+        var backendChannel = new EventEmitter()
         // Hack it up to support the .send() syntax from Electron. The .send()
         // method sends an event that gets an event object as a first argument,
-        // with a sender field.
-        backend_channel.send = function() {
+        // with a sender field. Also, send() should never throw an error.
+        backendChannel.send = function() {
             // Make a real array
             var args = Array.from(arguments)
             // Shift off the event name
-            var event_name = args.shift()
+            var eventName = args.shift()
             
             // Make a fake event object
-            var event_object = {
-                name: event_name,
+            var eventObject = {
+                name: eventName,
                 // It has to have a sender field that can send messages back
-                sender: backend_channel
+                sender: backendChannel
             }
             
             // Insert as an argument after the name of the event
-            args.unshift(event_object)
-            args.unshift(event_name)
+            args.unshift(eventObject)
+            args.unshift(eventName)
             
-            return backend_channel.emit.apply(this, args)
+            try {
+                // Emit the event
+                return backendChannel.emit.apply(this, args)
+            } catch (err) {
+                // Don't let errors in response to message receipt bubble up and
+                // break whatever sent the message.
+                console.error('Error from  %s message:', eventName, err)
+            }
         }
         
         // Satrt up the player and point it at the channel
-        Player.start(document.getElementById('player'), backend_channel)
+        Player.start(document.getElementById('player'), backendChannel)
         
         // Give the IpfsNode to the backend, and tell it to talk to the player
         // on this channel.
-        Backend.start(IpfsNode, backend_channel)
+        Backend.start(IpfsNode, backendChannel)
         
         // Load up some songs
-        Backend.load_songs('songs.json')
+        Backend.loadSongs('songs.json')
     })
   </script>
 </html>

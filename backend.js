@@ -12,9 +12,12 @@ var Backend = (function (AV) {
     ipc: null,
     // This holds the one AV player that is allowed to make noise. Not to be
     // confused with the Player, which is the frontend,
-    global_player: null,
+    globalPlayer: null,
+    // This determines if we should play the first globalPlayer we manage to
+    // make, as soon as we can.
+    playNow: false,    
     // This holds a song database
-    all_songs: []
+    allSongs: []
   }
   
   /**
@@ -67,11 +70,11 @@ var Backend = (function (AV) {
    * Download song records as JSON from the given URL and keep them in the local
    * database.
    */
-  backend.load_songs = function (url) {
+  backend.loadSongs = function (url) {
     backend.getJSON(url).then(function (songs) {
       // Add all the songs we downloaded.
       console.log('Downloaded songs', songs)
-      backend.all_songs = backend.all_songs.concat(songs)
+      backend.allSongs = backend.allSongs.concat(songs)
     }).catch(err => console.log(err))
   }
   
@@ -80,27 +83,27 @@ var Backend = (function (AV) {
    * function that, when called with a page number, calls a callback with that
    * page of the results as an array of Song objects.
    */
-  backend.find_songs = function (query) {
+  backend.findSongs = function (query) {
     // This will keep a persistent array of page arrays, until nobody wants the
     // results anymore.
     var pages = []
     
-    // This is our iteration index in all_songs
+    // This is our iteration index in allSongs
     var index = 0
     
     // This is our page size
-    var page_size = 10
+    var pageSize = 10
     
-    return function (page, page_handler) {
+    return function (page, pageHandler) {
       console.log('Finding page %d', page)
     
-      while(index < backend.all_songs.length && page >= pages.length) {
+      while(index < backend.allSongs.length && page >= pages.length) {
         // Make a new page
-        var new_page = []
+        var newPage = []
         
         console.log('Generating page %d', pages.length)
         
-        while (index < backend.all_songs.length && new_page.length < page_size) {
+        while (index < backend.allSongs.length && newPage.length < pageSize) {
           // We should search more songs
           
           // TODO: break up this loop so we don't scan all songs and make
@@ -108,30 +111,30 @@ var Backend = (function (AV) {
           // somehow.
           
           // How about this one
-          var candidate = backend.all_songs[index]
+          var candidate = backend.allSongs[index]
           index++
           
           // Evaluate a match. For now, one field has to contain the query.
           // Later we can try lunr.js or something.
-          var lower_query = query.toLowerCase()
-          if (candidate.title.toLowerCase().includes(lower_query) ||
-            candidate.artist.toLowerCase().includes(lower_query) ||
-            candidate.album.toLowerCase().includes(lower_query)) {
+          var lowerQuery = query.toLowerCase()
+          if (candidate.title.toLowerCase().includes(lowerQuery) ||
+            candidate.artist.toLowerCase().includes(lowerQuery) ||
+            candidate.album.toLowerCase().includes(lowerQuery)) {
             
             // This song is a match
-            new_page.push(candidate)
+            newPage.push(candidate)
             
           }
         }
-        pages.push(new_page)
+        pages.push(newPage)
       }
       
       if(page < pages.length) {
         // We already know what's on this page. Send it back.
-        page_handler(pages[page])
+        pageHandler(pages[page])
       } else {
         // We couldn't generate that page. Send an empty page.
-        page_handler([])
+        pageHandler([])
       }
       
     }
@@ -143,10 +146,10 @@ var Backend = (function (AV) {
    * with null and the song object, if it turns out to be a readable song. Calls
    * the callback with an error if there is an error.
    */
-  backend.add_song = function (file_data, callback) {
+  backend.addSong = function (fileData, callback) {
   
     // Load metadata and make sure it's audio
-    var asset = AV.Asset.fromBuffer(file_data)
+    var asset = AV.Asset.fromBuffer(fileData)
     
     asset.on('error', (err) => {
       // Report decoding errors
@@ -159,7 +162,7 @@ var Backend = (function (AV) {
       
       // Add it to IPFS
       var ipfs = backend.ipfsnode.ipfs
-      ipfs.files.add(ipfs.Buffer.from(file_data), (err, returned) => {
+      ipfs.files.add(ipfs.Buffer.from(fileData), (err, returned) => {
         if (err) {
           // IPFS didn't like it, so complain
           callback(err)
@@ -176,7 +179,7 @@ var Backend = (function (AV) {
         }
 
         // Add it to the database
-        backend.all_songs.push(song)
+        backend.allSongs.push(song)
         
         // Call the callback with no error and the song
         callback(null, song)
@@ -196,19 +199,19 @@ var Backend = (function (AV) {
     backend.ipfsnode = ipfsnode
     backend.ipc = ipc
     
-    backend.ipc.on('player-upload', (event, file_data) => {
+    backend.ipc.on('player-upload', (event, fileData) => {
       // Handle an ArrayBuffer of file data to upload.
       
       console.log('Uploading file...')
       
-      backend.add_song(file_data, (err, song) => {
+      backend.addSong(fileData, (err, song) => {
         if (err) {
           // Report errors
           throw err
         }
         
         // Send updated datatabse to the player so it displays it.
-        event.sender.send('player-songs', backend.all_songs)
+        event.sender.send('player-songs', backend.allSongs)
         
       })
         
@@ -218,9 +221,9 @@ var Backend = (function (AV) {
       // Handle a search query
       
       // First, see if it's an IPFS hash
-      var hash_regex = /(\/?ipfs\/|\/?ipns\/)?(Qm[A-HJ-NP-Za-km-z1-9]{44,45})/
+      var hashRegex = /(\/?ipfs\/|\/?ipns\/)?(Qm[A-HJ-NP-Za-km-z1-9]{44,45})/
       
-      var found = query.match(hash_regex)
+      var found = query.match(hashRegex)
       
       if(found) {
         // This is an IPFS hash. Extract just the hash part
@@ -230,18 +233,18 @@ var Backend = (function (AV) {
         console.log('Searching IPFS for', hash, found)
         
         // Use our wrapper to get the whoile file
-        backend.ipfsnode.cat_all(hash, (err, file_data) => {
+        backend.ipfsnode.catAll(hash, (err, fileData) => {
           if (err) {
             throw err
           }
             
-          backend.add_song(file_data, (err, song) => {
+          backend.addSong(fileData, (err, song) => {
             if (err) {
               throw err
             }
             
             // Send entire updated datatabse to the player so it displays it.
-            event.sender.send('player-songs', backend.all_songs)
+            event.sender.send('player-songs', backend.allSongs)
             
           })
         })
@@ -252,7 +255,7 @@ var Backend = (function (AV) {
       
         // Do a search and get the first page
         // TODO: allow paging forward and back
-        var pager = backend.find_songs(query)
+        var pager = backend.findSongs(query)
         
         pager(0, (results) => {
           console.log('Got %d search results', results.length)
@@ -267,25 +270,37 @@ var Backend = (function (AV) {
       
       console.log('Loading: %s', url)
       
-      if(backend.global_player !== null) {
+      if(backend.globalPlayer !== null) {
         // If there's already a One True Player, get rid of it. Only one player
         // will be allowed to replace it, when an IPFS cat finally finishes.
-        backend.global_player.stop();
-        backend.global_player = null;
+        backend.globalPlayer.stop();
+        backend.globalPlayer = null;
       }
+      
+      // Remember whether we want to play as soon as we can or not, but allow
+      // that to be changed if we get a play or pause event while the data for
+      // the song is being downloaded. TODO: this weird edge case goes away if
+      // we write an IpfsSource for aurora.js
+      backend.playNow = playNow
       
       // Get the track data from IPFS
       var ipfs = backend.ipfsnode.ipfs
         
-      backend.ipfsnode.cat_all(url.split(':')[1], (err, file_data) => {
+      backend.ipfsnode.catAll(url.split(':')[1], (err, fileData) => {
         if (err) {
           throw err
+        }
+        
+        if(backend.globalPlayer !== null) {
+          // Someone else has beaten us to becoming the One True Player.
+          // We have our data, but they ought to play instead.
+          return
         }
         
         console.log('Playing: %s', url)
         
         // Make an asset from the buffer
-        var asset = AV.Asset.fromBuffer(file_data)
+        var asset = AV.Asset.fromBuffer(fileData)
             
         asset.on('format', (format) => {
           console.log('Format decoded: ' + format)
@@ -305,7 +320,7 @@ var Backend = (function (AV) {
         var player = new AV.Player(asset)
         
         // Become the One True Player
-        backend.global_player = player;
+        backend.globalPlayer = player;
         
         player.on('error', (err) => {
           console.log('Player Error: ' + err)
@@ -323,38 +338,36 @@ var Backend = (function (AV) {
           event.sender.send('player-ended')
         })
         
-        if(playNow) {
+        if(backend.playNow) {
+          // We want to play the song as soon as we can
           console.log('Will play now')
-          asset.on('duration', () => {
-            if(backend.global_player === player) {
-              // Play only if instructed, and only after duration has been
-              // decoded (and we have the audio data ready to hand), *and*
-              // only if we are still the one true player.
-              console.log('Making play call')
-              player.play()
-            }
-          })
+          player.play()
+        } else {
+          // Just preload
+          player.preload()
         }
-        
-        // Preload the asset, which may eventually start the player if we
-        // are supposed to playNow.
-        player.preload()
       })
     })
     
     // Handle requests to pause the music
     backend.ipc.on('player-pause', (event) => {
-      if(backend.global_player !== null) {
+      if(backend.globalPlayer !== null) {
         console.log('Pause global player')
-        backend.global_player.pause()
+        backend.globalPlayer.pause()
+      } else {
+        console.log('No global player; do not play when ready')
+        backend.playNow = false
       }
     })
 
     // And to play it again
     backend.ipc.on('player-play', (event) => {
-      if(backend.global_player !== null) {
+      if(backend.globalPlayer !== null) {
         console.log('Play global player')
-        backend.global_player.play()
+        backend.globalPlayer.play()
+      } else {
+        console.log('No global player; play when ready')
+        backend.playNow = true
       }
     })
     
