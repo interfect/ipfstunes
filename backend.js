@@ -17,7 +17,12 @@ var Backend = (function (AV) {
     // make, as soon as we can.
     playNow: false,    
     // This holds a song database
-    allSongs: []
+    database: {
+      // This holds all the records in an array
+      allSongs: [],
+      // This maps from URL string to index in array
+      byUrl: {}
+    }
   }
   
   /**
@@ -66,6 +71,21 @@ var Backend = (function (AV) {
     })
   }
   
+  
+  /**
+   * Given a Song object with title, album, artist, and url, add the song to the
+   * metadata database if it doesn't already exist.
+   */
+  backend.loadSong = function(song) {
+    // We ID songs uniquely by URL for now
+    if (!backend.database.hasOwnProperty(song.url)) {
+      // Keep the new song
+      backend.database.allSongs.push(song)
+      // Record where it is in the database
+      backend.database[song.url] = backend.database.allSongs.length - 1
+    }
+  }
+  
   /**
    * Download song records as JSON from the given URL and keep them in the local
    * database. URL may be ipfs:.
@@ -82,14 +102,22 @@ var Backend = (function (AV) {
         // We got something back. Parse it as JSON
         var parsed = JSON.parse(fileData.toString('utf-8'))
         
-        // Add it to the songs
-        backend.allSongs = backend.allSongs.concat(parsed)
+        for(var i = 0; i < parsed.length; i++) {
+          // Add each item to the songs database if necessary
+          backend.loadSong(parsed[i])
+        }
+        
       })
     } else {
       backend.getJSON(url).then(function (songs) {
         // Add all the songs we downloaded.
         console.log('Downloaded songs', songs)
-        backend.allSongs = backend.allSongs.concat(songs)
+        
+        for(var i = 0; i < songs.length; i++) {
+          // Add each item to the songs database if necessary
+          backend.loadSong(songs[i])
+        }
+        
       }).catch(err => console.log(err))
     }
   }
@@ -100,11 +128,11 @@ var Backend = (function (AV) {
    * it fails, or null and the IPFS hash of the saved database if it succeeds.
    */
   backend.saveSongs = function(callback) {
-    console.log('Saving database of %d songs', backend.allSongs.length)
+    console.log('Saving database of %d songs', backend.database.allSongs.length)
   
     // Add it to IPFS
     var ipfs = backend.ipfsnode.ipfs
-    ipfs.files.add(ipfs.Buffer.from(JSON.stringify(backend.allSongs)), (err, returned) => {
+    ipfs.files.add(ipfs.Buffer.from(JSON.stringify(backend.database.allSongs)), (err, returned) => {
       if (err) {
         // IPFS didn't like it, so complain
         callback(err)
@@ -137,13 +165,13 @@ var Backend = (function (AV) {
     return function (page, pageHandler) {
       console.log('Finding page %d', page)
     
-      while(index < backend.allSongs.length && page >= pages.length) {
+      while(index < backend.database.allSongs.length && page >= pages.length) {
         // Make a new page
         var newPage = []
         
         console.log('Generating page %d', pages.length)
         
-        while (index < backend.allSongs.length && newPage.length < pageSize) {
+        while (index < backend.database.allSongs.length && newPage.length < pageSize) {
           // We should search more songs
           
           // TODO: break up this loop so we don't scan all songs and make
@@ -151,7 +179,7 @@ var Backend = (function (AV) {
           // somehow.
           
           // How about this one
-          var candidate = backend.allSongs[index]
+          var candidate = backend.database.allSongs[index]
           index++
           
           // Evaluate a match. For now, one field has to contain the query.
@@ -218,8 +246,8 @@ var Backend = (function (AV) {
           url: 'ipfs:' + returned[0].hash
         }
 
-        // Add it to the database
-        backend.allSongs.push(song)
+        // Add it to the database if it's not there already
+        backend.loadSong(song)
         
         // Call the callback with no error and the song
         callback(null, song)
@@ -250,8 +278,9 @@ var Backend = (function (AV) {
           throw err
         }
         
-        // Send updated datatabse to the player so it displays it.
-        event.sender.send('player-songs', backend.allSongs)
+        // Give the user just this song to look at.
+        // TODO: batch many songs if there are many being uploaded.
+        event.sender.send('player-songs', [song])
         
       })
         
@@ -280,16 +309,14 @@ var Backend = (function (AV) {
             
           backend.addSong(fileData, (err, song) => {
             if (err) {
-              // Maybe it's not a song but some metadata
-              console.log('Non-song %s:', hash, err)
-              backend.loadSongs('ipfs:' + hash)
-              return
+              // It's not a song actually
+              throw err
             }
             
-            // Otherwise it's a single song and we successfully loaded it
+            // It's a single song and we successfully loaded it
             
-            // Send entire updated datatabse to the player so it displays it.
-            event.sender.send('player-songs', backend.allSongs)
+            // Give the user just this song to look at
+            event.sender.send('player-songs', [song])
             
           })
         })
