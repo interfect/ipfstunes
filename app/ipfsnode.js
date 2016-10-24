@@ -58,7 +58,7 @@ var IpfsNode = (function () {
         // this the libp2p-webrtc-star transport won't be installed, and the
         // resulting node won't be able to dial out to libp2p-webrtc-star
         // addresses.
-        var starAddr = ('/libp2p-webrtc-star/ip4/10.1.0.10/tcp/9090/ws/ipfs/' +
+        var starAddr = ('/libp2p-webrtc-star/ip4/209.141.49.219/tcp/9090/ws/ipfs/' +
           config.Identity.PeerID)
         this.ipfs.config.set('Addresses.Swarm[1]', starAddr, (err) => {
           if (err) {
@@ -81,8 +81,9 @@ var IpfsNode = (function () {
         // Go online and connect to things
         this.ipfs.goOnline(() => {
           if(this.ipfs.isOnline()) {
-            // We went online successfully. Call the callback that the module
-            // consumer gave us.
+            // We went online successfully.
+            
+            // Call the callback that the module consumer gave us.
             ipfsOnlineCallback()
           } else {
             ipfsOnlineCallback(Error("IPFS did not come online"))
