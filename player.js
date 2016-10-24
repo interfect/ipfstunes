@@ -23,7 +23,7 @@ var Player = (function () {
       },
       // This is a list of song records to play
       playlist: [],
-      // These are the songs we can play
+      // These are the song results we are displaying to the user
       availableSongs: [],
       // This is the next noince value for songs added to the playlist
       nextNonce: 0,
@@ -149,63 +149,6 @@ var Player = (function () {
     
     // Startr playback of this track (which should exist)
     player.ractive.set("playback.state", "playing")
-  }
-  
-  /**
-   * Download and parse some JSON, and return a promise.
-   * TODO: Make this and the template getting function both be one basic XHR function.
-   */
-  player.getJSON = function (url) {
-    return new Promise(function (resolve, reject) {
-      var xhr = new XMLHttpRequest()
-      xhr.open("GET", url)
-      xhr.overrideMimeType("text/json")
-      xhr.onload = function () {
-        // This function gets the XHR as this, and fires when the XHR is
-        // done, one way or the other.
-        
-        console.log("Got " + url + " with " + xhr.statusText)
-        
-        // Grab the status
-        var status = this.status
-        if (status >= 200 && status < 300) {
-          // Status code is in the success range
-          var parsed
-          try {
-            // Parse the JSON
-            parsed = JSON.parse(xhr.responseText)
-          } catch(err) {
-            // We can't parse this JSON
-            reject(err)
-          }
-          
-          // OK we parsed it!
-          resolve(parsed)
-        } else {
-          // Something else happened (server returned error)
-          // We're upposed to reject with Error objects
-          reject(Error("XHR refused: " + xhr.statusText))
-        }
-      }
-      xhr.onerror = function () {
-        // Something happened and the request errored out
-        reject(Error("XHR error: " + xhr.statusText))
-      }
-      
-      // Kick off the request.
-      console.log("Getting " + url)
-      xhr.send()
-    })
-  }
-  
-  /**
-   * Download songs from the given URL and keep them in the local database.
-   */
-  player.loadSongs = function (url) {
-    player.getJSON(url).then(function (songs) {
-      // Add all the songs we downloaded.
-      player.ractive.merge("availableSongs", songs)
-    }).catch(err => console.log(err))
   }
   
   /**
@@ -463,9 +406,6 @@ var Player = (function () {
           // Just override all the songs we have already
           player.ractive.set("availableSongs", songs)
         })
-        
-        // Start looking for songs.
-        player.loadSongs("songs.json")
         
       })
       // Or complain about an error

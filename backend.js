@@ -16,6 +16,126 @@ var Backend = (function (AV) {
     // This holds a song database
     all_songs: []
   }
+  
+  /**
+   * Download and parse some JSON, and return a promise.
+   */
+  backend.getJSON = function (url) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest()
+      xhr.open("GET", url)
+      xhr.overrideMimeType("text/json")
+      xhr.onload = function () {
+        // This function gets the XHR as this, and fires when the XHR is
+        // done, one way or the other.
+        
+        console.log("Got " + url + " with " + xhr.statusText)
+        
+        // Grab the status
+        var status = this.status
+        if (status >= 200 && status < 300) {
+          // Status code is in the success range
+          var parsed
+          try {
+            // Parse the JSON
+            parsed = JSON.parse(xhr.responseText)
+          } catch(err) {
+            // We can't parse this JSON
+            reject(err)
+          }
+          
+          // OK we parsed it!
+          resolve(parsed)
+        } else {
+          // Something else happened (server returned error)
+          // We're upposed to reject with Error objects
+          reject(Error("XHR refused: " + xhr.statusText))
+        }
+      }
+      xhr.onerror = function () {
+        // Something happened and the request errored out
+        reject(Error("XHR error: " + xhr.statusText))
+      }
+      
+      // Kick off the request.
+      console.log("Getting " + url)
+      xhr.send()
+    })
+  }
+  
+  /**
+   * Download song records as JSON from the given URL and keep them in the local
+   * database.
+   */
+  backend.load_songs = function (url) {
+    backend.getJSON(url).then(function (songs) {
+      // Add all the songs we downloaded.
+      console.log('Downloaded songs', songs)
+      backend.all_songs = backend.all_songs.concat(songs)
+    }).catch(err => console.log(err))
+  }
+  
+  /**
+   * Search for songs containing the given string in their metadata. Returns a
+   * function that, when called with a page number, calls a callback with that
+   * page of the results as an array of Song objects.
+   */
+  backend.find_songs = function (query) {
+    // This will keep a persistent array of page arrays, until nobody wants the
+    // results anymore.
+    var pages = []
+    
+    // This is our iteration index in all_songs
+    var index = 0
+    
+    // This is our page size
+    var page_size = 10
+    
+    return function (page, page_handler) {
+      console.log('Finding page %d', page)
+    
+      while(index < backend.all_songs.length && page >= pages.length) {
+        // Make a new page
+        var new_page = []
+        
+        console.log('Generating page %d', pages.length)
+        
+        while (index < backend.all_songs.length && new_page.length < page_size) {
+          // We should search more songs
+          
+          // TODO: break up this loop so we don't scan all songs and make
+          // everyone wait, but in a way that lets us cancel the operation
+          // somehow.
+          
+          // How about this one
+          var candidate = backend.all_songs[index]
+          index++
+          
+          // Evaluate a match. For now, one field has to contain the query.
+          // Later we can try lunr.js or something.
+          var lower_query = query.toLowerCase()
+          if (candidate.title.toLowerCase().includes(lower_query) ||
+            candidate.artist.toLowerCase().includes(lower_query) ||
+            candidate.album.toLowerCase().includes(lower_query)) {
+            
+            // This song is a match
+            new_page.push(candidate)
+            
+          }
+        }
+        pages.push(new_page)
+      }
+      
+      if(page < pages.length) {
+        // We already know what's on this page. Send it back.
+        page_handler(pages[page])
+      } else {
+        // We couldn't generate that page. Send an empty page.
+        page_handler([])
+      }
+      
+    }
+  }
 
   /**
    * Add a song to the local metadata database with the metadata decoded from
@@ -51,7 +171,7 @@ var Backend = (function (AV) {
         var song = {
           title: metadata.title,
           album: metadata.album,
-          artist: metadata.album,
+          artist: metadata.artist,
           url: 'ipfs:' + returned[0].hash
         }
 
@@ -79,7 +199,7 @@ var Backend = (function (AV) {
     backend.ipc.on('player-upload', (event, file_data) => {
       // Handle an ArrayBuffer of file data to upload.
       
-      console.log('Backend got:', event, file_data)
+      console.log('Uploading file...')
       
       backend.add_song(file_data, (err, song) => {
         if (err) {
@@ -120,13 +240,24 @@ var Backend = (function (AV) {
               throw err
             }
             
-            // Send updated datatabse to the player so it displays it.
+            // Send entire updated datatabse to the player so it displays it.
             event.sender.send('player-songs', backend.all_songs)
             
           })
         })
-          
+      } else {
+        // It's not an IPFS hash for a song, so maybe it's a full text search
+      
+        console.log('Looking for songs matching', query)
+      
+        // Do a search and get the first page
+        // TODO: allow paging forward and back
+        var pager = backend.find_songs(query)
         
+        pager(0, (results) => {
+          console.log('Got %d search results', results.length)
+          event.sender.send('player-songs', results)
+        })
       }
     
     })
