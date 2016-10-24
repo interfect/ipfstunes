@@ -349,7 +349,14 @@ var Backend = (function (AV) {
         
         console.log('IPFS retrieved hint: %s', url)
         
-        // Ignore the stream
+        // Actually read the stream, but discard the data
+        stream.on('data', (buffer) => {
+          // Handle incoming data from IPFS
+          if(buffer.length > 0) {
+            // Don't pass through 0 length buffers.
+            console.log('Preloaded: %d bytes', buffer.length)
+          }
+        })
       })
     
     })
