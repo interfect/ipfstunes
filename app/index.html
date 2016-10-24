@@ -84,6 +84,9 @@
         // Give the IpfsNode to the backend, and tell it to talk to the player
         // on this channel.
         Backend.start(IpfsNode, backend_channel)
+        
+        // Load up some songs
+        Backend.load_songs('songs.json')
     })
   </script>
 </html>
