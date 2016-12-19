@@ -99,10 +99,20 @@
         
         // Wait for both to start up
         Backend.onReady( () => {
-            Player.onReady( () => {
-                // Load up the songs in the database in the page URL after both
-                // the player and backend are ready.
-                Player.importDatabase()
+            
+            // Load a default database of songs into the backend
+            Backend.loadSongs('songs.json', (err) => {
+                if (err) {
+                    throw err
+                }
+                
+                // Once those are loaded, wait for the player to be ready
+                Player.onReady( () => {
+                    // Load up the songs in the database in the page URL,
+                    // merging onto the default DB, and re-exporting afterwards.
+                    Player.importDatabase()
+                })
+                
             })
         })
     })
