@@ -301,7 +301,7 @@ var Backend = (function (AV) {
         
     })
     
-    backend.ipc.on('player-search', (event, query) => {
+    backend.ipc.on('player-search', (event, query, pageNumber) => {
       // Handle a search query
       
       // First, see if it's an IPFS hash
@@ -341,10 +341,10 @@ var Backend = (function (AV) {
         console.log('Looking for songs matching', query)
       
         // Do a search and get the first page
-        // TODO: allow paging forward and back
+        // TODO: reuse the pager
         var pager = backend.findSongs(query)
         
-        pager(0, (results) => {
+        pager(pageNumber, (results) => {
           console.log('Got %d search results', results.length)
           event.sender.send('player-songs', results)
         })

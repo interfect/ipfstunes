@@ -33,6 +33,8 @@ var Player = (function () {
       nextNonce: 0,
       // This is the search query we're sending
       searchQuery: '',
+      // This is the page in the search results
+      pageNumber: 0,
       // This is the database hash we are exporting/importing
       // We start out pulling from the page hash
       databaseHash: (document && document.location && document.location.hash) ? document.location.hash.substring(2) : '',
@@ -521,7 +523,24 @@ var Player = (function () {
         // Handle a search request from the user
         player.ractive.on('search', function (event) {
           // When someone hits search, send a search event
-          player.ipc.send('player-search', player.ractive.get('searchQuery'))
+          // Start at page 0
+          player.ractive.set('pageNumber', 0)
+          player.ipc.send('player-search', player.ractive.get('searchQuery'), player.ractive.get('pageNumber'))
+        })
+        
+        // Handle paging in the search results
+        player.ractive.on('pageForward', function (event) {
+          // When someone hits page forward, bump the page number
+          player.ractive.set('pageNumber', player.ractive.get('pageNumber') + 1)
+          player.ipc.send('player-search', player.ractive.get('searchQuery'), player.ractive.get('pageNumber'))
+        })
+        
+        player.ractive.on('pageBack', function (event) {
+          if (player.ractive.get('pageNumber') > 0) {
+            // When someone hits page back, bump the page number down if we can
+            player.ractive.set('pageNumber', player.ractive.get('pageNumber') - 1)
+            player.ipc.send('player-search', player.ractive.get('searchQuery'), player.ractive.get('pageNumber'))
+          }
         })
         
         // And for when we get a page of songs to show
