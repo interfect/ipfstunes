@@ -4,6 +4,10 @@ var Backend = (function (AV) {
 
   // Make the object we will export as our singleton sound-playing backend thingy.
   var backend = {
+    // This tracks if we have been started
+    ready: false,
+    // This holds the callbacks to call after we boot up
+    readyCallbacks: [],
     // This gets filled in with an IpfsNode instance that stores and retrieves
     // files.
     ipfsnode: null,
@@ -89,14 +93,15 @@ var Backend = (function (AV) {
   /**
    * Download song records as JSON from the given URL and keep them in the local
    * database. URL may be ipfs:.
+   * Calls the callback with an error, or null if everything works.
    */
-  backend.loadSongs = function (url) {
+  backend.loadSongs = function (url, callback) {
     var parts = url.split(':')
     if (parts[0] == 'ipfs') {
       // This is an ipfs URL.
       backend.ipfsnode.catAll(parts[1], (err, fileData) => {
         if (err) {
-          throw err
+          return callback(err)
         }
         
         // We got something back. Parse it as JSON
@@ -106,6 +111,8 @@ var Backend = (function (AV) {
           // Add each item to the songs database if necessary
           backend.loadSong(parsed[i])
         }
+        
+        callback(null)
         
       })
     } else {
@@ -118,7 +125,9 @@ var Backend = (function (AV) {
           backend.loadSong(songs[i])
         }
         
-      }).catch(err => console.log(err))
+        callback(null)
+        
+      }).catch(err => callback(err))
     }
   }
   
@@ -274,13 +283,13 @@ var Backend = (function (AV) {
       
       backend.addSong(fileData, (err, song) => {
         if (err) {
-          // Report errors
-          throw err
+          // Report errors, but make sure to send them back so the next song in
+          // the queue can be tried
+          event.sender.send('player-uploaded', err)
         }
         
-        // Give the user just this song to look at.
-        // TODO: batch many songs if there are many being uploaded.
-        event.sender.send('player-songs', [song])
+        // Say we uploaded the song
+        event.sender.send('player-uploaded', null, song)
         
       })
         
@@ -471,7 +480,14 @@ var Backend = (function (AV) {
     // Import song metadata from the given URL
     backend.ipc.on('player-import', (event, url) => {
       // Use the song loader method
-      backend.loadSongs(url)
+      backend.loadSongs(url, (err) => {
+        if (err) {
+          throw err
+        }
+        
+        event.sender.send('player-imported')
+        
+      })
     })
     
     // Export all song metadata to a URL and send it back in the player-exported
@@ -491,6 +507,26 @@ var Backend = (function (AV) {
     })
     
     console.log('Backend ready')
+    
+    // Mark the backend ready and tell everyone who has been waiting
+    backend.ready = true
+    while (backend.readyCallbacks.length > 0) {
+      callback = backend.readyCallbacks.pop()
+      callback()
+    }
+  }
+  
+  /**
+   * Call the given callback after the backend is ready to process IPC events.
+   */
+  backend.onReady = function (callback) {
+    if (backend.ready) {
+      // Ready now
+      callback()
+    } else {
+      // Call when ready
+      backend.readyCallbacks.push(callback);
+    }
   }
   
   // Return the completed module object
