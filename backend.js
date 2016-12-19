@@ -225,45 +225,51 @@ var Backend = (function (AV) {
    */
   backend.addSong = function (fileData, callback) {
   
-    // Load metadata and make sure it's audio
-    var asset = AV.Asset.fromBuffer(fileData)
-    
-    asset.on('error', (err) => {
-      // Report decoding errors
-      callback(err)
-    })
-    
-    asset.get('metadata', (metadata) => {
-      // We got metadata, so it must be real audio
-      console.log('Metadata', metadata)
+    try {
+      // Put the whole thing in a try-catch in case Aurora explodes
+  
+      // Load metadata and make sure it's audio
+      var asset = AV.Asset.fromBuffer(fileData)
       
-      // Add it to IPFS
-      var ipfs = backend.ipfsnode.ipfs
-      ipfs.files.add(ipfs.Buffer.from(fileData), (err, returned) => {
-        if (err) {
-          // IPFS didn't like it, so complain
-          callback(err)
-        }
-        
-        console.log('IPFS hash:', returned[0].hash)
-        
-        // Craft a song object
-        var song = {
-          title: metadata.title,
-          album: metadata.album,
-          artist: metadata.artist,
-          url: 'ipfs:' + returned[0].hash
-        }
-
-        // Add it to the database if it's not there already
-        backend.loadSong(song)
-        
-        // Call the callback with no error and the song
-        callback(null, song)
-        
+      asset.on('error', (err) => {
+        // Report decoding errors
+        callback(err)
       })
       
-    })
+      asset.get('metadata', (metadata) => {
+        // We got metadata, so it must be real audio
+        console.log('Metadata', metadata)
+        
+        // Add it to IPFS
+        var ipfs = backend.ipfsnode.ipfs
+        ipfs.files.add(ipfs.Buffer.from(fileData), (err, returned) => {
+          if (err) {
+            // IPFS didn't like it, so complain
+            callback(err)
+          }
+          
+          console.log('IPFS hash:', returned[0].hash)
+          
+          // Craft a song object
+          var song = {
+            title: metadata.title,
+            album: metadata.album,
+            artist: metadata.artist,
+            url: 'ipfs:' + returned[0].hash
+          }
+
+          // Add it to the database if it's not there already
+          backend.loadSong(song)
+          
+          // Call the callback with no error and the song
+          callback(null, song)
+          
+        })
+        
+      })
+    } catch (err) {
+      callback(err)
+    }
   
   }
 

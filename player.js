@@ -267,22 +267,33 @@ var Player = (function () {
             this.set('playback.state', 'playing')
           }
           
+          // Don't change window hash
+          return false
           
         })
         
         player.ractive.on('pause', function (event) {
           // Pause event happened
           this.set('playback.state', 'paused')
+          
+          // Don't change window hash
+          return false
         })
         
         player.ractive.on('skipAhead', function (event) {
           // Skip ahead event happened
           player.skipAhead()
+          
+          // Don't change window hash
+          return false
         })
         
         player.ractive.on('skipBack', function (event) {
           // Skip back event happened
           player.skipBack()
+          
+          // Don't change window hash
+          return false
         })
         
         player.ractive.on('queue', function (event, index) {
