@@ -347,7 +347,7 @@ var Backend = (function (AV) {
           throw err
         }
         
-        console.log('IPFS retrieved hint: %s', url)
+        console.log('IPFS received hint: %s', url)
         
         // Actually read the stream, but discard the data
         stream.on('data', (buffer) => {

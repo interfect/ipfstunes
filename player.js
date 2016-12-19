@@ -182,6 +182,24 @@ var Player = (function () {
                 // No song is playing
                 return null
               }
+            },
+            // Compute the song that will play next
+            nextPlaying: function () {
+              var index = this.get("playingIndex")
+              var playlist = this.get("playlist")
+              var state = this.get("playback.state")
+              if (state == "playing") {
+                // The song that's at the playing index is playing right now, so
+                // the next song to play is the song after it.
+                index += 1;
+              }
+              if (index !== null && index >= 0 && index < playlist.length) {
+                // This song is playing
+                return playlist[index]
+              } else {
+                // No song is playing
+                return null
+              }
             }
           }
         })
@@ -232,10 +250,6 @@ var Player = (function () {
           var song = this.get("availableSongs[" + index + "]")
           // Put the song on the playlist in a playlist entry
           this.push("playlist", {song: song, nonce: player.nonce()})
-          
-          // Hint the song to the backend so it knows it may be played soon.
-          // TODO: stop hinting and preloading in aurora.js at the same time.
-          player.ipc.send('player-hint', song.url)
         })
         
         player.ractive.on("remove", function (event, index) {
@@ -317,6 +331,14 @@ var Player = (function () {
           if (val == null) {
             // Pause if there's nothing to play.
             this.set("playback.state", "paused")
+          }
+        })
+        
+        // Watch the nextPlaying state and preload songs
+        player.ractive.observe("nextPlaying.song.url", function (val) {
+          if (val != null) {
+              // Hint the song to the backend so it knows it may be played soon.
+              player.ipc.send('player-hint', val)
           }
         })
         
