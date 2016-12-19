@@ -97,8 +97,14 @@
         // on this channel.
         Backend.start(IpfsNode, backendChannel)
         
-        // Load up some songs
-        Backend.loadSongs('songs.json')
+        // Wait for both to start up
+        Backend.onReady( () => {
+            Player.onReady( () => {
+                // Load up the songs in the database in the page URL after both
+                // the player and backend are ready.
+                Player.importDatabase()
+            })
+        })
     })
   </script>
 </html>

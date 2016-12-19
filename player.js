@@ -4,6 +4,10 @@ var Player = (function () {
 
   // This will get exported and hold all the public stuff as the global Player
   var player = {
+    // This tracks if we have been started
+    ready: false,
+    // This holds the callbacks to call after we boot up
+    readyCallbacks: [],
     // This holds the Ractive object for the main player
     ractive: null,
     // This holds the initial ractive data
@@ -31,7 +35,9 @@ var Player = (function () {
       searchQuery: '',
       // This is the database hash we are exporting/importing
       // We start out pulling from the page hash
-      databaseHash: (document && document.location && document.location.hash) ? document.location.hash.substring(2) : ''
+      databaseHash: (document && document.location && document.location.hash) ? document.location.hash.substring(2) : '',
+      // This is the queue of songs to upload
+      uploadQueue: []
     },
     
     // This is the event channel through which we communicate with the code
@@ -79,8 +85,8 @@ var Player = (function () {
   }
   
   /**
-   * Given a File object from the HTML5 Files API, load all the content and send
-   * it to the backend to be uploaded.
+   * Given a File object from the HTML5 Files API, immediately load all the
+   * content and send it to the backend to be uploaded.
    */
   player.uploadFile = function(file) {
     // Make a reader to read the file
@@ -93,6 +99,15 @@ var Player = (function () {
     
     // Load an ArrayBuffer of file contents and send it to the backend
     reader.readAsArrayBuffer(file)
+  }
+  
+  /**
+   * Given a File object from the HTML5 Files API, queue it to be loaded and
+   * sent to the backend for uploading.
+   */
+  player.queueUploadFile = function(file) {
+    // Add to the queue
+    player.ractive.push("uploadQueue", file);
   }
   
   /**
@@ -152,6 +167,30 @@ var Player = (function () {
     
     // Start playback of this track (which should exist)
     player.ractive.set('playback.state', 'playing')
+  }
+  
+  /**
+   * Import the database pointed to by the ractive. Can't happen on start,
+   * because the backend may not be ready.
+   */
+  player.importDatabase = function () {
+    // Grab the hash to import
+    var hash = player.ractive.get('databaseHash')
+    
+    if (!hash) {
+      // Don't do anything
+      return
+    }
+    
+    if (!hash.includes(':')) {
+      // Add an IPFS protocol specifier
+      hash = 'ipfs:' + hash 
+    }
+    
+    console.log('Merging in database %s', hash)
+    
+    // Tell the backend to import this URL
+    player.ipc.send('player-import', hash)
   }
   
   /**
@@ -314,16 +353,56 @@ var Player = (function () {
 
           // Let's upload these files
           var toUpload = document.getElementById('upload').files
+          
+          // If nothing is already queued, we will need to kick off the upload
+          var startUpload = player.ractive.get("uploadQueue").length == 0
+          
           for(var i = 0; i < toUpload.length; i++) {
-            // Upload each File object
-            player.uploadFile(toUpload[i])
+            // Queue each File object to be uploaded
+            player.queueUploadFile(toUpload[i])
           }
           
           // Clear out the upload control
           document.getElementById('upload').value = null
           
-          // TODO: tell the user it worked.
+          // Clear out the available song list to fill it
+          player.ractive.set("availableSongs", [])
           
+          if (startUpload) {
+            // Kick off the first upload, since nothing is uploading yet.
+            player.ractive.pop("uploadQueue").then(function (file) {
+              // Pop off the next thing to upload and upload it
+              player.uploadFile(file)
+            });
+          }
+          
+        })
+        
+        player.ipc.on('player-uploaded', function (event, err, song) {
+            // Handle upload results
+            
+            player.ractive.pop("uploadQueue").then(function (file) {
+              // Pop off the next thing
+              if (file) {
+                // If there is one, upload it
+                player.uploadFile(file)
+              } else {
+                // Queue complete, export database and update page hash. Don't
+                // export after every file or we will make way too many
+                // databases...
+                player.ipc.send('player-export')
+              }
+            });
+            
+            // While that's happening
+            
+            if (err) {
+              // Upload failed
+              throw err
+            } else {
+              // Upload succeeded and we have a song
+              player.ractive.push("availableSongs", song)
+            }
         })
         
         // Watch the nowPlaying state and make actual sound
@@ -445,16 +524,13 @@ var Player = (function () {
         // Handle importing some song metadata
         player.ractive.on('import-db', function (event) {
             
-            // Grab the hash to import
-            var hash = player.ractive.get('databaseHash')
-            
-            if (!hash.includes(':')) {
-                // Add an IPFS protocol specifier
-                hash = hash + 'ipfs:'
-            }
-            
-            // Tell the backend to import this URL
-            player.ipc.send('player-import', hash)
+            player.importDatabase()
+        })
+        
+        // Handle when the backend says it's done importing
+        player.ipc.on('player-imported', function (event) {
+            // Immediately export the DB
+            player.ipc.send('player-export')
         })
         
         // Handle exporting all song metadata
@@ -466,7 +542,7 @@ var Player = (function () {
         // Handle an exported-to-URL event
         player.ipc.on('player-exported', function (event, url) {
           // Just display the URL
-          console.log('Set to URL: ', url)
+          console.log('Current database URL: ', url)
           player.ractive.set('databaseHash', url)
         })
         
@@ -475,12 +551,30 @@ var Player = (function () {
             document.location.hash = '#!' + val
         })
         
-        // Initially kick off importing the hash the page loaded with
-        player.ipc.send('player-import', player.ractive.get('databaseHash'))
+        // Mark the player ready and tell everyone who has been waiting
+        player.ready = true
+        while (player.readyCallbacks.length > 0) {
+          callback = player.readyCallbacks.pop()
+          callback()
+        }
         
       })
       // Or complain about an error
       .catch(err => console.log(err))
+  }
+  
+  /**
+   * Call the given callback after the player is ready to process events and
+   * handle function calls besides start.
+   */
+  player.onReady = function (callback) {
+    if (player.ready) {
+      // Ready now
+      callback()
+    } else {
+      // Call when ready
+      player.readyCallbacks.push(callback);
+    }
   }
   
   // Export the module object
