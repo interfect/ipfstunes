@@ -26,6 +26,8 @@ var IpfsNode = (function () {
     
     // Find the buffer implementation
     ipfsnode.Buffer = window.Buffer
+    
+    // TODO: Adding files with in-browser js-ipfs is *extremely* slow and hangs the browser UI for like a minute
   } else {
     console.log('Using ipfs-js fallback')
     ipfsnode.ipfs = new IPFS()
