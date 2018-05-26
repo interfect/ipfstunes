@@ -99,7 +99,7 @@ var Backend = (function (AV) {
     var parts = url.split(':')
     if (parts[0] == 'ipfs') {
       // This is an ipfs URL.
-      backend.ipfsnode.catAll(parts[1], (err, fileData) => {
+      backend.ipfsnode.ipfs.files.cat(parts[1], (err, fileData) => {
         if (err) {
           return callback(err)
         }
@@ -141,7 +141,7 @@ var Backend = (function (AV) {
   
     // Add it to IPFS
     var ipfs = backend.ipfsnode.ipfs
-    ipfs.files.add(ipfs.Buffer.from(JSON.stringify(backend.database.allSongs)), (err, returned) => {
+    ipfs.files.add(backend.ipfsnode.Buffer.from(JSON.stringify(backend.database.allSongs)), (err, returned) => {
       if (err) {
         // IPFS didn't like it, so complain
         callback(err)
@@ -242,7 +242,7 @@ var Backend = (function (AV) {
         
         // Add it to IPFS
         var ipfs = backend.ipfsnode.ipfs
-        ipfs.files.add(ipfs.Buffer.from(fileData), (err, returned) => {
+        ipfs.files.add(backend.ipfsnode.Buffer.from(fileData), (err, returned) => {
           if (err) {
             // IPFS didn't like it, so complain
             callback(err)
@@ -317,7 +317,7 @@ var Backend = (function (AV) {
         console.log('Searching IPFS for', hash, found)
         
         // Use our wrapper to get the whoile file
-        backend.ipfsnode.catAll(hash, (err, fileData) => {
+        backend.ipfsnode.ipfs.files.cat(hash, (err, fileData) => {
           if (err) {
             throw err
           }
@@ -357,21 +357,15 @@ var Backend = (function (AV) {
     backend.ipc.on('player-hint', (event, url) => {
       
       var ipfs = backend.ipfsnode.ipfs
-      ipfs.files.cat(url.split(':')[1], (err, stream) => {
+      ipfs.files.cat(url.split(':')[1], (err, data) => {
         if (err) {
           throw err
         }
         
-        console.log('IPFS received hint: %s', url)
+        console.log('IPFS downloaded file for hint: %s', url)
         
-        // Actually read the stream, but discard the data
-        stream.on('data', (buffer) => {
-          // Handle incoming data from IPFS
-          if(buffer.length > 0) {
-            // Don't pass through 0 length buffers.
-            console.log('Preloaded: %d bytes', buffer.length)
-          }
-        })
+        // Discard the data for now
+        
       })
     
     })
@@ -396,7 +390,8 @@ var Backend = (function (AV) {
       backend.playNow = playNow
       
       // Get the track data from IPFS
-      backend.ipfsnode.catAll(url.split(':')[1], (err, fileData) => {
+      var ipfs = backend.ipfsnode.ipfs
+      ipfs.files.cat(url.split(':')[1], (err, fileData) => {
         if (err) {
           throw err
         }
