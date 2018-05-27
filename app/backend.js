@@ -30,49 +30,48 @@ var Backend = (function (AV) {
   }
   
   /**
-   * Download and parse some JSON, and return a promise.
+   * Load the given URL as an ArrayBuffer or UInt8Array or similar.
+   * Supports ipfs: and ipfs+A256GCM: with # separating hash from key.
+   * Also supports anything Fetch supports.
    */
-  backend.getJSON = function (url) {
-    return new Promise(function (resolve, reject) {
-      var xhr = new XMLHttpRequest()
-      xhr.open("GET", url)
-      xhr.overrideMimeType("text/json")
-      xhr.onload = function () {
-        // This function gets the XHR as this, and fires when the XHR is
-        // done, one way or the other.
-        
-        console.log("Got " + url + " with " + xhr.statusText)
-        
-        // Grab the status
-        var status = this.status
-        if (status >= 200 && status < 300) {
-          // Status code is in the success range
-          var parsed
-          try {
-            // Parse the JSON
-            parsed = JSON.parse(xhr.responseText)
-          } catch(err) {
-            // We can't parse this JSON
-            reject(err)
-          }
-          
-          // OK we parsed it!
-          resolve(parsed)
-        } else {
-          // Something else happened (server returned error)
-          // We're upposed to reject with Error objects
-          reject(Error("XHR refused: " + xhr.statusText))
-        }
-      }
-      xhr.onerror = function () {
-        // Something happened and the request errored out
-        reject(Error("XHR error: " + xhr.statusText))
-      }
+  backend.loadUrl = function(url, callback) {
+    var parts = url.split(':')
+    if (parts[0] == 'ipfs') {
+      // This is an ipfs URL.
+      backend.ipfsnode.ipfs.files.cat(parts[1], callback)
+    } else if (parts[0] == 'ipfs+A256GCM') {
+      // It is encrypted
       
-      // Kick off the request.
-      console.log("Getting " + url)
-      xhr.send()
-    })
+      var urlParts = parts[1].split('#')
+      var ipfsHash = urlParts[0]
+      var key = urlParts[1]
+      
+      backend.loadUrl('ipfs:' + ipfsHash, async (err, data) => {
+        // Go download the encrypted blob
+        if (err) {
+          return callback(err)
+        }
+        
+        // Decrypt the data and send it to our callback
+        var decrypted
+        try {
+          decrypted = await EasyCrypto.decrypt(data, key)
+        } catch (err) {
+          return callback(err)
+        }
+        callback(null, decrypted)
+      })
+       
+    } else {
+      // It is probably something Fetch can do
+      fetch(new Request(url)).then((response) => {
+        return response.arrayBuffer()
+      }).catch((err) => {
+        callback(err)
+      }).then((buffer) => {
+        callback(null, buffer)
+      })
+    }
   }
   
   
@@ -96,39 +95,23 @@ var Backend = (function (AV) {
    * Calls the callback with an error, or null if everything works.
    */
   backend.loadSongs = function (url, callback) {
-    var parts = url.split(':')
-    if (parts[0] == 'ipfs') {
-      // This is an ipfs URL.
-      backend.ipfsnode.ipfs.files.cat(parts[1], (err, fileData) => {
-        if (err) {
-          return callback(err)
-        }
-        
-        // We got something back. Parse it as JSON
-        var parsed = JSON.parse(fileData.toString('utf-8'))
-        
-        for(var i = 0; i < parsed.length; i++) {
-          // Add each item to the songs database if necessary
-          backend.loadSong(parsed[i])
-        }
-        
-        callback(null)
-        
-      })
-    } else {
-      backend.getJSON(url).then(function (songs) {
-        // Add all the songs we downloaded.
-        console.log('Downloaded songs', songs)
-        
-        for(var i = 0; i < songs.length; i++) {
-          // Add each item to the songs database if necessary
-          backend.loadSong(songs[i])
-        }
-        
-        callback(null)
-        
-      }).catch(err => callback(err))
-    }
+    backend.loadUrl(url, (err, data) => {
+      // Download the URL where the song data is
+      if (err) {
+        return callback(err)
+      }
+      
+      // We got something back. Parse it as UTF-8 JSON
+      var parsed = JSON.parse(new TextDecoder('utf-8').decode(fileData))
+      
+      for(var i = 0; i < parsed.length; i++) {
+        // Add each item to the songs database if necessary
+        backend.loadSong(parsed[i])
+      }
+      
+      callback(null)
+      
+    })
   }
   
   
@@ -356,13 +339,12 @@ var Backend = (function (AV) {
     // looking for their content.
     backend.ipc.on('player-hint', (event, url) => {
       
-      var ipfs = backend.ipfsnode.ipfs
-      ipfs.files.cat(url.split(':')[1], (err, data) => {
+      backend.loadUrl(url, (err, data) => {
         if (err) {
           throw err
         }
         
-        console.log('IPFS downloaded file for hint: %s', url)
+        console.log('Downloaded file for hint: %s', url)
         
         // Discard the data for now
         
@@ -389,9 +371,8 @@ var Backend = (function (AV) {
       // we write an IpfsSource for aurora.js
       backend.playNow = playNow
       
-      // Get the track data from IPFS
-      var ipfs = backend.ipfsnode.ipfs
-      ipfs.files.cat(url.split(':')[1], (err, fileData) => {
+      // Get the track data
+      backend.loadUrl(url, (err, fileData) => {
         if (err) {
           throw err
         }
