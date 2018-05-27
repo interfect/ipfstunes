@@ -82,11 +82,11 @@ var Backend = (function (AV) {
    */
   backend.loadSong = function(song) {
     // We ID songs uniquely by URL for now
-    if (!backend.database.hasOwnProperty(song.url)) {
+    if (!backend.database.byUrl.hasOwnProperty(song.url)) {
       // Keep the new song
       backend.database.allSongs.push(song)
       // Record where it is in the database
-      backend.database[song.url] = backend.database.allSongs.length - 1
+      backend.database.byUrl[song.url] = backend.database.allSongs.length - 1
     }
   }
   

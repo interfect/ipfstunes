@@ -33,6 +33,9 @@
   to be given one to communicate with its backend on. -->
   <script src="lib/EventEmitter.js"></script>
   
+  <!-- We need easy cryptography -->
+  <script src="easycrypto.js"></script>
+  
   <!-- We need the IPFS code that manages our in-browser IPFS node -->
   <script src="ipfsnode.js"></script>
   
@@ -52,7 +55,7 @@
   <script src="backend.js"></script>
   
   <script>
-    // Start upo IPFS
+    // Start up IPFS
     IpfsNode.start((err) => {
         if (err) {
             throw err
