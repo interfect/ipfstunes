@@ -21,7 +21,19 @@ var IpfsNode = (function () {
       return ipfsOnlineCallback(new Error('Cannot find IPFS implementation!'))
     }
     
-    ipfsnode.ipfs = new IPFS()
+    // Make the IPFS node, using websockets and webrtc as transports.
+    ipfsnode.ipfs = new IPFS({
+      config: {
+        Addresses: {
+          Swarm: [
+            // Disable webrtc-star because it's still not good.
+            // It interferes with peers being found over websocket-star
+            //'/dns4/wrtc-star.discovery.libp2p.io/tcp/443/wss/p2p-webrtc-star',
+            '/dns4/ws-star.discovery.libp2p.io/tcp/443/wss/p2p-websocket-star'
+          ]
+        }
+      }
+    })
     
     // Tell the node to fire the callback with an error or when it is ready.
     ipfsnode.ipfs.on('error', ipfsOnlineCallback)
@@ -29,6 +41,21 @@ var IpfsNode = (function () {
     
     // Find the buffer implementation for this mode
     ipfsnode.Buffer = ipfsnode.ipfs.types.Buffer
+    
+    // Periodically dump peers
+    setInterval(() => {
+      ipfsnode.ipfs.id((err, id) => {
+        if (err) {
+          throw err
+        }
+        ipfsnode.ipfs.swarm.peers({}, function(err, peers) {
+          if (err) {
+            throw err
+          }
+          console.log('We are IPFS node ' + id.id + ' with ' + peers.length + ' peers')
+        })
+      })
+    }, 60000)
   }
   
   
