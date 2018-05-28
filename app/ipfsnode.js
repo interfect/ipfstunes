@@ -75,12 +75,9 @@ var IpfsNode = (function () {
           return startFallback(ipfsOnlineCallback)
         }
         
-        if (id.agentVersion && id.agentVersion.indexOf('js-ipfs') != -1) {
-          // This is the JS implementation and we don't want to use it.
-          // We have our own better JS implementation that doesn't hang the browser chrome.
-          console.log('Rejecting blacklisted ' + id.agentVersion + ' via window.ipfs')
-          return startFallback(ipfsOnlineCallback)
-        }
+        // TODO: We will try window.ipfs despite https://github.com/ipfs-shipyard/ipfs-companion/issues/485
+        // Hangs appear to occur no matter if it is talking to internal js-ipfs or external go-ipfs.
+        // The workaround is to make the user disable window.ipfs. I will leave it like this and hope the extension fixes its bug.
         
         // Otherwise the browser node checks out.
         console.log('Using ' + id.agentVersion + ' via window.ipfs')
