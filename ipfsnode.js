@@ -3,55 +3,76 @@
 // Auto-finds its IPFS module dependency.
 var IpfsNode = (function () {
 
-  // Find the IPFS implementation
-  var IPFS
-  if(!(typeof require === 'undefined')) {
-    // Can load through Node
-    IPFS = require('ipfs')
-  } else if(!(typeof Ipfs === 'undefined')) {
-    // Can load through browser global
-    IPFS = Ipfs
-  }
-
-  // Make the object we will export as our singleton IPFS node manager thingy.
   var ipfsnode = {}
-  if (window.ipfs) {
-    console.log('Using built-in browser IPFS support')
-    ipfsnode.ipfs = window.ipfs
+  
+  // If we decide to use the in-browser implementation, we call this.
+  var startFallback = function(ipfsOnlineCallback) {
+    console.log('Using ipfs-js fallback')
     
-    // Node is already started, so start function can be an immediate callback
-    ipfsnode.start = function (ipfsOnlineCallback) {
-      ipfsOnlineCallback()
+    // Find the IPFS implementation
+    var IPFS
+    if(!(typeof require === 'undefined')) {
+      // Can load through Node
+      IPFS = require('ipfs')
+    } else if(!(typeof Ipfs === 'undefined')) {
+      // Can load through browser global
+      IPFS = Ipfs
+    } else {
+      return ipfsOnlineCallback(new Error('Cannot find IPFS implementation!'))
     }
     
-    // Find the buffer implementation
-    ipfsnode.Buffer = window.Buffer
-    
-    // TODO: Adding files with in-browser js-ipfs is *extremely* slow and hangs the browser UI for like a minute
-  } else {
-    console.log('Using ipfs-js fallback')
     ipfsnode.ipfs = new IPFS()
     
-    /**
-     * Start up the node, and call the given callback with no argument when it is
-     * online. If an error is encountered, call the callback with the error
-     * instead.
-     */
-    ipfsnode.start = function (ipfsOnlineCallback) {
-      ipfsnode.ipfs.on('error', ipfsOnlineCallback)
-      ipfsnode.ipfs.on('ready', ipfsOnlineCallback)
-    }
+    // Tell the node to fire the callback with an error or when it is ready.
+    ipfsnode.ipfs.on('error', ipfsOnlineCallback)
+    ipfsnode.ipfs.on('ready', ipfsOnlineCallback)
     
-    // Find the buffer implementation
+    // Find the buffer implementation for this mode
     ipfsnode.Buffer = ipfsnode.ipfs.types.Buffer
   }
-  // ipfsnode.ipfs provides ipfs.files.add(), etc.
+  
+  
+  ipfsnode.ipfs = {}
+  
+  /**
+   * Start the IPFS node.
+   * After this calls back, the module will have an ipfs field holding the actual, running node.
+   */
+  ipfsnode.start = function(ipfsOnlineCallback) {
+    if (window.ipfs) {
+      // We maybe have a local IPFS. But we only want to use the go one; the JS one as part of an extension hangs the browser when we do anything hard.
+      // So ask the node what it is.
+      window.ipfs.id((err, id) => {
+        if (err) {
+          // Couldn't talk to the window node. Use the fallback
+          return startFallback(ipfsOnlineCallback)
+        }
+        
+        if (id.agentVersion && id.agentVersion.indexOf('js-ipfs') != -1) {
+          // This is the JS implementation and we don't want to use it.
+          // We have our own better JS implementation that doesn't hang the browser chrome.
+          console.log('Rejecting blacklisted ' + id.agentVersion + ' via window.ipfs')
+          return startFallback(ipfsOnlineCallback)
+        }
+        
+        // Otherwise the browser node checks out.
+        console.log('Using ' + id.agentVersion + ' via window.ipfs')
+        ipfsnode.ipfs = window.ipfs
+        
+        // We don't need to start the node, since it is started.
+        
+        // Find the buffer implementation
+        ipfsnode.Buffer = window.Buffer
+        
+        // Say we are started
+        return ipfsOnlineCallback(null)
+      })
+    } else {
+      // No window.ipfs at all. Use the fallback.
+      return startFallback(ipfsOnlineCallback)
+    }
+  }
 
-  
-  
-  
-  
-  
   // Return the completed module object, with start method and ipfs field
   return ipfsnode
 }())
