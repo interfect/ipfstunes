@@ -2,6 +2,9 @@
 /// Suitable for protecting your personal song library from being played by others.
 /// May or may not be sufficient to prevent you from distributing music without a license
 /// if you import songs you are not allowed to make available to others.
+/// Note that the encryption is deterministic and repeatable: every time you encrypt a file with a key, you get the same answer.
+/// IVs are not re-used across different files, but sending the same file twice is obvious.
+/// File sizes are also leaked.
 var EasyCrypto = (function () {
   
   // Define a module
@@ -19,10 +22,8 @@ var EasyCrypto = (function () {
   // And the usages array we need
   easycrypto.usages = ["encrypt", "decrypt", "wrapKey", "unwrapKey"]
   
-  /// Generate a new, unused initialization vector.
-  easycrypto.generateIv = async function() {
-    return window.crypto.getRandomValues(new Uint8Array(easycrypto.ivLength))
-  }
+  // And the hash algorithm we use for hashing
+  easycrypto.hashAlgo = 'SHA-256'
   
   /// Convert a bare key string to JWK for import.
   /// Assumes it is using the parameters we use
@@ -38,13 +39,26 @@ var EasyCrypto = (function () {
   }
 
   /// Encrypt an ArrayBuffer with the given key string. Returns a Promise for the result.
+  /// Guarantees that the same data encrypted with the same key always returns the same encrypted blob.
   easycrypto.encrypt = async function(dataBuffer, key) {
     // Import the key from a nice string
     // Decide it's JWK
     var importedKey = await crypto.subtle.importKey('jwk', easycrypto.stringToJwk(key), easycrypto.algo, true, easycrypto.usages)
     
-    // Make an IV
-    var iv = await easycrypto.generateIv()
+    // Make an IV by hashing the plaintext and then the key.
+    // This is deterministic, non-repeating, and doesn't leak the file hash as the IV.
+    
+    // First turn the key string (in whatever encoding JWK uses) into bytes
+    // This isn't the same as the actual value of the key but it should be good enough
+    var keyBytes = (new TextEncoder()).encode(key)
+    
+    // Put it after the message
+    var messageWithKey = new Uint8Array(dataBuffer.length + keyBytes.length)
+    messageWithKey.set(dataBuffer)
+    messageWithKey.set(keyBytes, dataBuffer.length)
+    
+    // We hash and then truncate the hash to the chosen IV length.
+    var iv = (new Uint8Array(await crypto.subtle.digest(easycrypto.hashAlgo, messageWithKey))).subarray(0, easycrypto.ivLength)
     
     // Use the key and make an encrypted buffer
     var encrypted = await crypto.subtle.encrypt({name: easycrypto.algo.name, iv: iv}, importedKey, dataBuffer)
@@ -53,9 +67,9 @@ var EasyCrypto = (function () {
     var encryptedArray = new Uint8Array(encrypted)
     
     // Tack on IV
-    var encryptedWithIv = new Uint8Array(iv.length + encryptedArray.length);
-    encryptedWithIv.set(iv);
-    encryptedWithIv.set(encryptedArray, iv.length);
+    var encryptedWithIv = new Uint8Array(iv.length + encryptedArray.length)
+    encryptedWithIv.set(iv)
+    encryptedWithIv.set(encryptedArray, iv.length)
     
     return encryptedWithIv
   }
@@ -83,6 +97,14 @@ var EasyCrypto = (function () {
   easycrypto.generateKey = async function() {
     var generatedKey = await crypto.subtle.generateKey(easycrypto.algo, true, easycrypto.usages)
     return easycrypto.jwkToString(await crypto.subtle.exportKey('jwk', generatedKey))
+  }
+  
+  /// Hash the given buffer and return its hash as a string.
+  easycrypto.hash = async function(dataBuffer) {
+    var hashBuffer = await crypto.subtle.digest(easycrypto.hashAlgo, dataBuffer)
+    // See https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/digest for the nice bytes-to-hex trick.
+    var hexHash = Array.from(new Uint8Array(hashBuffer)).map(b => ('00' + b.toString(16)).slice(-2)).join('')
+    return hexHash
   }
 
   // Export the module object

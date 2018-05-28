@@ -35,9 +35,9 @@ var Player = (function () {
       searchQuery: '',
       // This is the page in the search results
       pageNumber: 0,
-      // This is the database hash we are exporting/importing
+      // This is the database URL we are working with
       // We start out pulling from the page hash
-      databaseHash: (document && document.location && document.location.hash) ? document.location.hash.substring(2) : '',
+      databaseUrl: (document && document.location && document.location.hash) ? document.location.hash.substring(2) : '',
       // This is the queue of songs to upload
       uploadQueue: []
     },
@@ -176,23 +176,24 @@ var Player = (function () {
    * because the backend may not be ready.
    */
   player.importDatabase = function () {
-    // Grab the hash to import
-    var hash = player.ractive.get('databaseHash')
+    // Grab the url to import
+    var url = player.ractive.get('databaseUrl')
     
-    if (!hash) {
+    if (!url) {
       // Don't do anything
       return
     }
     
-    if (!hash.includes(':')) {
-      // Add an IPFS protocol specifier
-      hash = 'ipfs:' + hash 
+    if (!url.includes(':')) {
+      // Interpret as a bare IPFS hash.
+      // Add an IPFS protocol specifier.
+      url = 'ipfs:' + url 
     }
     
-    console.log('Merging in database %s', hash)
+    console.log('Merging in database %s', url)
     
     // Tell the backend to import this URL
-    player.ipc.send('player-import', hash)
+    player.ipc.send('player-import', url)
   }
   
   /**
@@ -553,7 +554,6 @@ var Player = (function () {
         
         // Handle importing some song metadata
         player.ractive.on('import-db', function (event) {
-            
             player.importDatabase()
         })
         
@@ -573,11 +573,11 @@ var Player = (function () {
         player.ipc.on('player-exported', function (event, url) {
           // Just display the URL
           console.log('Current database URL: ', url)
-          player.ractive.set('databaseHash', url)
+          player.ractive.set('databaseUrl', url)
         })
         
         // Keep the window location hash in sync with the exported database
-        player.ractive.observe('databaseHash', function (val) {
+        player.ractive.observe('databaseUrl', function (val) {
             document.location.hash = '#!' + val
         })
         
