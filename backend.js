@@ -24,9 +24,13 @@ var Backend = (function (AV) {
     database: {
       // This holds all the records in an array
       allSongs: [],
-      // This maps from URL string to index in array
-      byUrl: {}
-    }
+      // This maps from song file hex hash (not IPFS hash) to index in array
+      byHash: {}
+    },
+    // This holds a map from hex hash to encrypted URL for ipfs+A256GCM.
+    // This lets us avoid encrypting the same thing again if we want to save it twice.
+    // Especially useful for the song database export.
+    hashToEncryptedUrl: {}
   }
   
   /**
@@ -52,13 +56,19 @@ var Backend = (function (AV) {
           return callback(err)
         }
         
-        // Decrypt the data and send it to our callback
+        // Decrypt the data
         var decrypted
         try {
           decrypted = await EasyCrypto.decrypt(data, key)
+          
+          // Compute its hash in case we are asked to save the same data again
+          var hexHash = await EasyCrypto.hash(decrypted)
+          backend.hashToEncryptedUrl[hexHash] = url
         } catch (err) {
           return callback(err)
         }
+        
+        // Return the decrypted data
         callback(null, decrypted)
       })
        
@@ -74,19 +84,109 @@ var Backend = (function (AV) {
     }
   }
   
+  /**
+   * Save the given typed array/buffer data to a URL of the given scheme.
+   * Supports ipfs and ipfs+A256GCM as schemes.
+   *
+   * For encrypted destinations, also calls back with the plaintext hash as a
+   * hex string (so the callback can take 3 arguments).
+   */
+  backend.saveToUrl = function(scheme, fileData, callback) {
+    if (scheme == 'ipfs') {
+      // Save unencrypted data to IPFS
+      var ipfs = backend.ipfsnode.ipfs
+      ipfs.files.add(backend.ipfsnode.Buffer.from(fileData), (err, returned) => {
+        if (err) {
+          // IPFS didn't like it, so complain
+          return callback(err)
+        }
+        
+        console.log('IPFS hash:', returned[0].hash)
+        callback(null, 'ipfs:' + returned[0].hash)
+      })
+    } else if (scheme == 'ipfs+A256GCM') {
+      // First we need to know if we already know an encrypted URL for this data.
+      // So we hash it.
+      EasyCrypto.hash(fileData).catch((err) => {
+        return callback(err)
+      }).then((hexHash) => {
+        
+        // We will fill this with a promise for the key to use for encryption.
+        var keyPromise
+        
+        if (backend.hashToEncryptedUrl.hasOwnProperty(hexHash)) {
+          // We already have a URL where this data should live.
+          var url = backend.hashToEncryptedUrl[hexHash]
+          
+          // We don't know that the data is still accessible in IPFS at that URL.
+          // But luckily we can re-encrypt the same data with the same key and get the same blob.
+          // So we will re-insert.
+          // We just need to make sure to use the same key.
+          var key = url.split(':')[1].split('#')[1]
+          console.log('Duplicate data ' + hexHash + ' should use key ' + key)
+          
+          keyPromise = new Promise((resolve, reject) => {
+            resolve(key)
+          })
+        } else {
+          // Otherwise we have to make a new key.
+          keyPromise = EasyCrypto.generateKey()
+        }
+        
+        // Get the key
+        keyPromise.catch((err) => {
+          return callback(err)
+        }).then((key) => {
+          EasyCrypto.encrypt(fileData, key).catch((err) => {
+            return callback(err)
+          }).then((encryptedData) => {
+            // Save the encrypted data to IPFS
+            backend.saveToUrl('ipfs', encryptedData, (err, ipfsUrl) => {
+              if (err) {
+                return callback(err)
+              }
+            
+              var parts = ipfsUrl.split(':')
+              // Put together a URL containing the key
+              var url = 'ipfs+A256GCM:' + parts[1] + '#' + key
+              
+              // Cache it
+              backend.hashToEncryptedUrl[hexHash] = url
+              
+              // And send it back
+              callback(null, url, hexHash)
+            })
+          })
+        })
+      })
+    } else {
+      // Can't write this
+      return callback(new Error('Unsupported scheme ' + scheme + ' for writing'))
+    }
+  }
+  
   
   /**
-   * Given a Song object with title, album, artist, and url, add the song to the
+   * Given a Song object with title, album, artist, url, and hash, add the song to the
    * metadata database if it doesn't already exist.
    */
   backend.loadSong = function(song) {
-    // We ID songs uniquely by URL for now
-    if (!backend.database.byUrl.hasOwnProperty(song.url)) {
+    // We ID songs uniquely by file hash for now
+    if (!backend.database.byHash.hasOwnProperty(song.hash)) {
       // Keep the new song
       backend.database.allSongs.push(song)
       // Record where it is in the database
-      backend.database.byUrl[song.url] = backend.database.allSongs.length - 1
+      backend.database.byHash[song.hash] = backend.database.allSongs.length - 1
     }
+    
+    if (song.url.split(':')[0] == 'ipfs+A256GCM') {
+      // We will also hint the hash to encrypted URL database, in case the user
+      // tries to upload this song twice!
+      if (!backend.hashToEncryptedUrl.hasOwnProperty(song.hash)) {
+        backend.hashToEncryptedUrl[song.hash] = song.url
+      }
+    }
+    
   }
   
   /**
@@ -95,7 +195,7 @@ var Backend = (function (AV) {
    * Calls the callback with an error, or null if everything works.
    */
   backend.loadSongs = function (url, callback) {
-    backend.loadUrl(url, (err, data) => {
+    backend.loadUrl(url, (err, fileData) => {
       // Download the URL where the song data is
       if (err) {
         return callback(err)
@@ -117,23 +217,23 @@ var Backend = (function (AV) {
   
   /**
    * Save the song database to IPFS as JSON. Call the callback with an error if
-   * it fails, or null and the IPFS hash of the saved database if it succeeds.
+   * it fails, or null and the URL of the saved database if it succeeds.
    */
   backend.saveSongs = function(callback) {
     console.log('Saving database of %d songs', backend.database.allSongs.length)
   
     // Add it to IPFS
     var ipfs = backend.ipfsnode.ipfs
-    ipfs.files.add(backend.ipfsnode.Buffer.from(JSON.stringify(backend.database.allSongs)), (err, returned) => {
+    backend.saveToUrl('ipfs+A256GCM', new TextEncoder().encode(JSON.stringify(backend.database.allSongs)), (err, url) => {
       if (err) {
         // IPFS didn't like it, so complain
-        callback(err)
+        return callback(err)
       }
       
-      console.log('Database saved to IPFS hash:', returned[0].hash)
+      console.log('Database saved to:', url)
       
       // Call the callback with no error and the hash
-      callback(null, returned[0].hash)
+      callback(null, url)
       
     })
   }
@@ -224,21 +324,22 @@ var Backend = (function (AV) {
         console.log('Metadata', metadata)
         
         // Add it to IPFS
-        var ipfs = backend.ipfsnode.ipfs
-        ipfs.files.add(backend.ipfsnode.Buffer.from(fileData), (err, returned) => {
+        backend.saveToUrl('ipfs+A256GCM', fileData, (err, url, hexHash) => {
+          // We are interested in the plaintext hash for ID-ing/deduplicating songs.
           if (err) {
             // IPFS didn't like it, so complain
-            callback(err)
+            return callback(err)
           }
           
-          console.log('IPFS hash:', returned[0].hash)
+          console.log('Saved URL:', url)
           
           // Craft a song object
           var song = {
             title: metadata.title,
             album: metadata.album,
             artist: metadata.artist,
-            url: 'ipfs:' + returned[0].hash
+            hash: hexHash,
+            url: url
           }
 
           // Add it to the database if it's not there already
@@ -475,7 +576,7 @@ var Backend = (function (AV) {
     // Export all song metadata to a URL and send it back in the player-exported
     // event.
     backend.ipc.on('player-export', (event, url) => {
-      backend.saveSongs((err, hash) => {
+      backend.saveSongs((err, url) => {
         if (err) {
           // Complain about any errors
           throw err
@@ -484,7 +585,7 @@ var Backend = (function (AV) {
         console.log('Exported successfully')
         
         // Reply with the hash of the database
-        event.sender.send('player-exported', 'ipfs:' + hash)
+        event.sender.send('player-exported', url)
       })
     })
     
