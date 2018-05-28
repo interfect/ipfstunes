@@ -53,7 +53,7 @@ var EasyCrypto = (function () {
     var keyBytes = (new TextEncoder()).encode(key)
     
     // Put it after the message
-    var messageWithKey = new Uint8Array(dataBuffer.length + keyBytes.length)
+    var messageWithKey = new Uint8Array(dataBuffer.byteLength + keyBytes.byteLength)
     messageWithKey.set(dataBuffer)
     messageWithKey.set(keyBytes, dataBuffer.length)
     
@@ -67,7 +67,7 @@ var EasyCrypto = (function () {
     var encryptedArray = new Uint8Array(encrypted)
     
     // Tack on IV
-    var encryptedWithIv = new Uint8Array(iv.length + encryptedArray.length)
+    var encryptedWithIv = new Uint8Array(iv.byteLength + encryptedArray.byteLength)
     encryptedWithIv.set(iv)
     encryptedWithIv.set(encryptedArray, iv.length)
     
