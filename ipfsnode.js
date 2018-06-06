@@ -29,7 +29,8 @@ var IpfsNode = (function () {
             // Disable webrtc-star because it's still not good.
             // It interferes with peers being found over websocket-star
             //'/dns4/wrtc-star.discovery.libp2p.io/tcp/443/wss/p2p-webrtc-star',
-            '/dns4/ws-star.discovery.libp2p.io/tcp/443/wss/p2p-websocket-star',
+            // TODO: Check these before trying to use them, as any down server can prevent node startup!
+            //'/dns4/ws-star.discovery.libp2p.io/tcp/443/wss/p2p-websocket-star',
             '/dns4/ws-star-signal-2.servep2p.com/tcp/443/wss/p2p-websocket-star'
           ]
         }
