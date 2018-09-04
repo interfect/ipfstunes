@@ -14,6 +14,7 @@
     <!-- This is the actual main UI Ractive div -->
     <div id="player" class="player">
         <p>Loading...</p>
+        <button id="reloadfailsafe" style="display: none;" onclick="clearAndReload()">Delete Database and Reload</button>
     </div>
   </body>
 
@@ -55,6 +56,24 @@
   <script src="backend.js"></script>
   
   <script>
+    // Allow the user to clear out the database, in case it is an old version and js-ipfs refuses to upgrade it
+    function clearAndRelaod() {
+        window.indexedDB.deleteDatabase("ipfs")
+        window.indexedDB.deleteDatabase("ipfs/blocks")
+        window.indexedDB.deleteDatabase("ipfs/datastore")
+        window.indexedDB.deleteDatabase("ipfs/keys")
+        window.location.reload() 
+    }
+    
+    window.setTimeout(() => {
+        // If the page sits too long without the ractive being set up, IPFS may have
+        // crashed due to an out of date database (or an inaccessible signaling server)
+        let button = document.getElementById("reloadfailsafe")
+        if (button) {
+            button.style.display = "block"
+        }
+    }, 2000)
+  
     // Start up IPFS
     IpfsNode.start((err) => {
         if (err) {
